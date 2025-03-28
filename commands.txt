@@ -1,0 +1,3 @@
+# Activate Virtual Environment
+cd D:\Projects\SPICE.AI
+venv\Scripts\activate
