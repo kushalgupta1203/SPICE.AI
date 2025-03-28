@@ -9,126 +9,143 @@ from model import SolarPanelClassifier
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
+# Enable CuDNN optimizations
+torch.backends.cudnn.benchmark = True
+
 # Paths
 train_dir = "D:/Projects/SPICE.AI/dataset/augmented/train"
 val_dir = "D:/Projects/SPICE.AI/dataset/processed/val"
 
 # Hyperparameters
-BATCH_SIZE = 32
-LR = 0.0005  # Reduced learning rate for better stability
+BATCH_SIZE = 128
+LR = 0.0005
 EPOCHS = 30
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_CLASSES = 6  # Multi-label classification (Dust, Snow, Bird Drop, etc.)
-WEIGHT_DECAY = 1e-4  # Prevents overfitting
+NUM_CLASSES = 6
+WEIGHT_DECAY = 1e-4
+EARLY_STOPPING_PATIENCE = 3
+ACCUMULATION_STEPS = 2  # Helps with small batch sizes
+DROPOUT_RATE = 0.5  # Dropout for regularization
 
-# Enhanced Data Augmentation for Training
+# Data Transforms
 train_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((224, 224)),  
     transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(20),  # Increased randomness
+    transforms.RandomRotation(20),
     transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
-    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),  # New addition
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Only Normalization for Validation
 val_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((224, 224)),  
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Load Datasets
-train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transforms)
-val_dataset = datasets.ImageFolder(root=val_dir, transform=val_transforms)
+def apply_regularization(model):
+    """Applies dropout layers to prevent overfitting."""
+    for module in model.modules():
+        if isinstance(module, nn.Dropout):
+            module.p = DROPOUT_RATE
 
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+def train():
+    # Load Datasets
+    train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transforms)
+    val_dataset = datasets.ImageFolder(root=val_dir, transform=val_transforms)
 
-# Load Model
-model = SolarPanelClassifier(num_classes=NUM_CLASSES).to(DEVICE)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, 
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, 
+                            num_workers=4, pin_memory=True, persistent_workers=True)
 
-# Modify Fully Connected Layers to Add Dropout
-for module in model.modules():
-    if isinstance(module, nn.Linear):
-        module.dropout = nn.Dropout(p=0.4)  # Regularization
+    # Load Model
+    model = SolarPanelClassifier(num_classes=NUM_CLASSES).to(DEVICE)
+    apply_regularization(model)
 
-# ✅ **Change Loss Function for Multi-Label Classification**
-criterion = nn.BCEWithLogitsLoss()  # Binary cross-entropy for multi-label
-optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5, verbose=True)
+    # Loss function and optimizer
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5)
 
-# Training Loop
-best_val_loss = float('inf')
-early_stop_counter = 0
-EARLY_STOPPING_PATIENCE = 3  # Reduce patience for faster stopping
+    # Mixed Precision Training
+    scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
 
-os.makedirs("models", exist_ok=True)  # Create models directory
+    # Training Loop
+    best_val_loss = float('inf')
+    early_stop_counter = 0
+    os.makedirs("models", exist_ok=True)
 
-for epoch in range(EPOCHS):
-    model.train()
-    train_loss, correct, total = 0, 0, 0
-    
-    print(f"\nEpoch {epoch+1}/{EPOCHS}")
-    for images, labels in tqdm(train_loader):
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
+    for epoch in range(EPOCHS):
+        model.train()
+        train_loss, correct, total = 0, 0, 0
 
-        optimizer.zero_grad()
-        outputs = model(images)
+        print(f"\nEpoch {epoch+1}/{EPOCHS}")
 
-        # ✅ **Change Label Processing**
-        labels = nn.functional.one_hot(labels, num_classes=NUM_CLASSES).float()  # Convert to multi-label format
-
-        loss = criterion(outputs, labels)  # BCE Loss
-        loss.backward()
-        optimizer.step()
-
-        train_loss += loss.item()
-
-        # ✅ **Modify Accuracy Calculation (Multi-Label)**
-        predicted = (torch.sigmoid(outputs) > 0.5).float()  # Apply threshold
-        correct += (predicted == labels).sum().item()  # Count correct labels
-        total += labels.numel()  # Total labels (not just batch size)
-
-    train_acc = 100 * correct / total
-    print(f"Training Loss: {train_loss/len(train_loader):.4f} | Accuracy: {train_acc:.2f}%")
-
-    # Validation Step
-    model.eval()
-    val_loss, correct, total = 0, 0, 0
-    with torch.no_grad():
-        for images, labels in val_loader:
+        for i, (images, labels) in enumerate(tqdm(train_loader)):
             images, labels = images.to(DEVICE), labels.to(DEVICE)
+            labels = nn.functional.one_hot(labels, num_classes=NUM_CLASSES).float()  # Multi-label handling
 
-            outputs = model(images)
+            with torch.cuda.amp.autocast():
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                loss = loss / ACCUMULATION_STEPS  # Gradient accumulation
 
-            labels = nn.functional.one_hot(labels, num_classes=NUM_CLASSES).float()
+            # Backpropagation
+            scaler.scale(loss).backward() if scaler else loss.backward()
 
-            loss = criterion(outputs, labels)
-            val_loss += loss.item()
+            if (i + 1) % ACCUMULATION_STEPS == 0 or i == len(train_loader) - 1:
+                scaler.step(optimizer) if scaler else optimizer.step()
+                scaler.update() if scaler else None
+                optimizer.zero_grad()
 
-            predicted = (torch.sigmoid(outputs) > 0.5).float()
+            train_loss += loss.item()
+            predicted = (torch.sigmoid(outputs) > 0.5).float()  # Multi-label threshold
             correct += (predicted == labels).sum().item()
             total += labels.numel()
 
-    val_acc = 100 * correct / total
-    val_loss /= len(val_loader)
-    print(f"Validation Loss: {val_loss:.4f} | Accuracy: {val_acc:.2f}%")
+        train_acc = 100 * correct / total
+        print(f"Training Loss: {train_loss/len(train_loader):.4f} | Accuracy: {train_acc:.2f}%")
 
-    # Learning Rate Scheduling
-    scheduler.step(val_loss)
+        # Validation
+        model.eval()
+        val_loss, correct, total = 0, 0, 0
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(DEVICE), labels.to(DEVICE)
+                labels = nn.functional.one_hot(labels, num_classes=NUM_CLASSES).float()
 
-    # Early Stopping
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        torch.save(model.state_dict(), "models/model.pth")  # Save in models folder
-        print("Model saved in models folder as 'model.pth'")
-        early_stop_counter = 0
-    else:
-        early_stop_counter += 1
-        if early_stop_counter >= EARLY_STOPPING_PATIENCE:
-            print("Early stopping triggered.")
-            break
+                with torch.cuda.amp.autocast():
+                    outputs = model(images)
+                    loss = criterion(outputs, labels)
 
-print("Training Complete")
+                val_loss += loss.item()
+                predicted = (torch.sigmoid(outputs) > 0.5).float()
+                correct += (predicted == labels).sum().item()
+                total += labels.numel()
+
+        val_acc = 100 * correct / total
+        val_loss /= len(val_loader)
+        print(f"Validation Loss: {val_loss:.4f} | Accuracy: {val_acc:.2f}%")
+
+        # Learning Rate Scheduling
+        scheduler.step(val_loss)
+
+        # Early Stopping & Model Saving
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), "models/model.pth")
+            print("Model saved in models folder as 'model.pth'")
+            early_stop_counter = 0
+        else:
+            early_stop_counter += 1
+            if early_stop_counter >= EARLY_STOPPING_PATIENCE:
+                print("Early stopping triggered.")
+                break
+
+    print("Training Complete")
+
+
+if __name__ == "__main__":
+    train()

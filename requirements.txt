@@ -1,4 +1,5 @@
 tensorflow
+pandas
 keras
 numpy
 opencv-python
@@ -6,7 +7,6 @@ matplotlib
 pillow
 scipy
 scikit-learn
-flask
 streamlit
 albumentations
 tqdm

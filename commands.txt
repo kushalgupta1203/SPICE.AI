@@ -1,9 +1,9 @@
-# Install Required Libraries
-pip install requirements.txt
-
 # Activate Virtual Environment
 cd D:\Projects\SPICE.AI
 venv\Scripts\activate
+
+# Install Required Libraries
+pip install requirements.txt
 
 # Step 1: Split dataset
 python dataset/split_data.py
