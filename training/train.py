@@ -1,5 +1,8 @@
 from image_generator import train_data, val_data
-from model import create_model
+import sys
+sys.path.append("D:/Projects/SPICE.AI")
+
+from model.model import create_model
 
 model = create_model()
 
