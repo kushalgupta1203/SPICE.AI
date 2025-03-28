@@ -4,16 +4,41 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.utils.data import DataLoader
-from model import SolarPanelClassifier
+import sys
+
+# Ensure correct import from models directory
+sys.path.append(os.path.abspath("D:/Projects/SPICE.AI/"))
+from models.model import SolarPanelClassifier
 
 # Paths
-test_dir = "D:/Projects/SPICE.AI/dataset/processed/test"
-MODEL_PATH = "models/model.pth"
+TEST_DIR = "D:/Projects/SPICE.AI/dataset/processed/test"
+MODEL_PATH = "D:/Projects/SPICE.AI/models/model.pth"
 
 # Hyperparameters
-BATCH_SIZE = 32
+BATCH_SIZE = 1  # Process one image at a time for individual inspection
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_CLASSES = 6  
+
+CLASS_NAMES = [
+    "Clean",
+    "Bird Drop",
+    "Dusty",
+    "Snow-Covered",
+    "Electrical Damage",
+    "Physical Damage"
+]
+
+CLEANING_SUGGESTIONS = {
+    "Bird Drop": "Use mild detergent and water to remove bird droppings.",
+    "Dusty": "Regularly clean with a soft brush or water spray.",
+    "Snow-Covered": "Use a soft broom or heater-based removal.",
+    "Electrical Damage": "Inspect wiring and consult a technician.",
+    "Physical Damage": "Replace damaged panels or consult a professional."
+}
+
+# Ensure model file exists
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
 
 # Transformations (Only Normalization)
 test_transforms = transforms.Compose([
@@ -23,32 +48,44 @@ test_transforms = transforms.Compose([
 ])
 
 # Load Dataset
-test_dataset = datasets.ImageFolder(root=test_dir, transform=test_transforms)
+test_dataset = datasets.ImageFolder(root=TEST_DIR, transform=test_transforms)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # Load Model
 model = SolarPanelClassifier(num_classes=NUM_CLASSES).to(DEVICE)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
-model.eval()
+model.eval()  # Set model to evaluation mode
 
-# Evaluation
-criterion = nn.CrossEntropyLoss()
-test_loss, correct, total = 0, 0, 0
+# Function to calculate inspection score
+def get_inspection_score(pred_class, confidences):
+    """
+    Generate inspection score based on classification and confidence.
+    - Clean → High score (85-100)
+    - Issues → Lower score based on severity
+    """
+    if pred_class == "Clean":
+        return 90 + (confidences.max().item() * 10)  # High score for clean panels
+    
+    # Reduce score based on confidence in problematic class
+    return max(30, 80 - (confidences.max().item() * 50))  # Score between 30-80
 
-with torch.no_grad():
-    for batch in test_loader:
-        images, labels = batch
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
+# Evaluation (per image)
+for idx, (image, _) in enumerate(test_loader):
+    image = image.to(DEVICE)
 
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        test_loss += loss.item()
+    with torch.no_grad():
+        outputs = model(image)
+        confidences = torch.softmax(outputs, dim=1)  # Convert logits to probabilities
+        predicted_class_idx = torch.argmax(confidences).item()
+        predicted_class = CLASS_NAMES[predicted_class_idx]
 
-        _, predicted = outputs.max(1)
-        total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
+        # Calculate inspection score
+        score = get_inspection_score(predicted_class, confidences)
 
-test_acc = 100 * correct / total
-test_loss /= len(test_loader)
+        # Get cleaning suggestions if needed
+        cleaning_tip = CLEANING_SUGGESTIONS.get(predicted_class, "No cleaning required.")
 
-print(f"Test Loss: {test_loss:.4f} | Test Accuracy: {test_acc:.2f}%")
+        print(f"\n--- Image {idx+1} ---")
+        print(f"Predicted Class: {predicted_class}")
+        print(f"Inspection Score: {score:.2f}/100")
+        print(f"Suggestion: {cleaning_tip}")

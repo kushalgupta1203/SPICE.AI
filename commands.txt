@@ -17,3 +17,5 @@ python training/train.py
 # Step 4: Test model
 python testing/test.py
 
+# Step 5: Deploy model
+streamlit run deployment/app.py
