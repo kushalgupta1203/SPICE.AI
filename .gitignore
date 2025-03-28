@@ -1,8 +1,4 @@
 venv/
-.env
 dataset/
-# Ignore trained model files
-model/*.h5
-model/*.hdf5
-model/*.pb
-model/saved_model/
+models/
+
