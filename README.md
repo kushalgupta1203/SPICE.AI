@@ -1,2 +1,2 @@
 # SPICE.AI
-(Solar Panel Inspection & Classification Engine)
+Solar Panel Inspection & Classification Engine
