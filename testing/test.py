@@ -38,7 +38,7 @@ transform = transforms.Compose([
 # Paths
 test_csv = "D:/Projects/SPICE.AI/dataset/splitted/test/_classes.csv"
 test_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/test"
-model_path = "D:/Projects/SPICE.AI/models/solar_panel_mobilenetv3_best.pth"
+model_path = "D:/Projects/SPICE.AI/models/spice_ai_mobilenetv3_epoch_2.pth"
 
 # Load Dataset
 test_dataset = SolarPanelDataset(test_csv, test_img_dir, transform)
@@ -50,7 +50,7 @@ def get_mobilenetv3():
         nn.Linear(960, 512),  # Match checkpoint shape
         nn.ReLU(),
         nn.Dropout(0.2),
-        nn.Linear(512, 9)  # 9 output classes
+        nn.Linear(512, 8)  # 8 output classes
     )
     return model
 # Test Function
