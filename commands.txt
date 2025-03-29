@@ -5,11 +5,11 @@ venv\Scripts\activate
 # Install Required Libraries
 pip install requirements.txt
 
-# Step 1: Split dataset
-python dataset/split_data.py
+# Step 1: Merge dataset
+python dataset/merge.py
 
-# Step 2: Augment dataset
-python dataset/augment.py
+# Step 2: Split dataset
+python dataset/split.py
 
 # Step 3: Train model
 python training/train.py
