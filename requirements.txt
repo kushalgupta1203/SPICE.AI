@@ -5,6 +5,7 @@ numpy
 opencv-python
 matplotlib
 pillow
+pillow-simd
 scipy
 scikit-learn
 streamlit
