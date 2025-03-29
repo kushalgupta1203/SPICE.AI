@@ -59,9 +59,9 @@ val_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/val"
 train_dataset = SolarPanelDataset(train_csv, train_img_dir, train_transform)
 valid_dataset = SolarPanelDataset(val_csv, val_img_dir, valid_transform)
 
-# DataLoader Optimizations
-train_loader = DataLoader(train_dataset, batch_size=128, num_workers=4, shuffle=True, pin_memory=True, persistent_workers=True)
-valid_loader = DataLoader(valid_dataset, batch_size=128, num_workers=4, shuffle=False, pin_memory=True, persistent_workers=True)
+# Reduce GPU Overload
+train_loader = DataLoader(train_dataset, batch_size=64, num_workers=0, shuffle=True, pin_memory=True, persistent_workers=False)
+valid_loader = DataLoader(valid_dataset, batch_size=64, num_workers=0, shuffle=False, pin_memory=True, persistent_workers=False)
 
 # Define Model with Dropout
 def get_mobilenet_v3():
