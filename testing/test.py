@@ -1,91 +1,88 @@
-import os
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-from torch.utils.data import DataLoader
-import sys
+import torchvision.models as models
+from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
+from torch.utils.data import DataLoader, Dataset
+import pandas as pd
+import os
+from PIL import Image
 
-# Ensure correct import from models directory
-sys.path.append(os.path.abspath("D:/Projects/SPICE.AI/"))
-from models.model import SolarPanelClassifier
+# Dataset Class
+class SolarPanelDataset(Dataset):
+    def __init__(self, csv_path, img_dir, transform=None):
+        self.data = pd.read_csv(csv_path)
+        self.img_dir = img_dir
+        self.transform = transform
 
-# Paths
-TEST_DIR = "D:/Projects/SPICE.AI/dataset/processed/test"
-MODEL_PATH = "D:/Projects/SPICE.AI/models/model.pth"
+    def __len__(self):
+        return len(self.data)
 
-# Hyperparameters
-BATCH_SIZE = 1  # Process one image at a time for individual inspection
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_CLASSES = 6  
+    def __getitem__(self, idx):
+        image_path = os.path.join(self.img_dir, self.data.iloc[idx, 0])  # First column is filename
+        image = Image.open(image_path).convert("RGB")
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        labels = torch.tensor(self.data.iloc[idx, 1:].astype(int).values, dtype=torch.float32)
+        return image, labels
 
-CLASS_NAMES = [
-    "Clean",
-    "Bird Drop",
-    "Dusty",
-    "Snow-Covered",
-    "Electrical Damage",
-    "Physical Damage"
-]
-
-CLEANING_SUGGESTIONS = {
-    "Bird Drop": "Use mild detergent and water to remove bird droppings.",
-    "Dusty": "Regularly clean with a soft brush or water spray.",
-    "Snow-Covered": "Use a soft broom or heater-based removal.",
-    "Electrical Damage": "Inspect wiring and consult a technician.",
-    "Physical Damage": "Replace damaged panels or consult a professional."
-}
-
-# Ensure model file exists
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-
-# Transformations (Only Normalization)
-test_transforms = transforms.Compose([
+# Define Data Transformations
+transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
+# Paths
+test_csv = "D:/Projects/SPICE.AI/dataset/splitted/test/_classes.csv"
+test_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/test"
+model_path = "D:/Projects/SPICE.AI/models/solar_panel_mobilenetv3_best.pth"
+
 # Load Dataset
-test_dataset = datasets.ImageFolder(root=TEST_DIR, transform=test_transforms)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+test_dataset = SolarPanelDataset(test_csv, test_img_dir, transform)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=0)
 
-# Load Model
-model = SolarPanelClassifier(num_classes=NUM_CLASSES).to(DEVICE)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
-model.eval()  # Set model to evaluation mode
+def get_mobilenetv3():
+    model = models.mobilenet_v3_large(weights=MobileNet_V3_Large_Weights.DEFAULT)
+    model.classifier = nn.Sequential(
+        nn.Linear(960, 512),  # Match checkpoint shape
+        nn.ReLU(),
+        nn.Dropout(0.2),
+        nn.Linear(512, 9)  # 9 output classes
+    )
+    return model
+# Test Function
+def test_model():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-# Function to calculate inspection score
-def get_inspection_score(pred_class, confidences):
-    """
-    Generate inspection score based on classification and confidence.
-    - Clean → High score (85-100)
-    - Issues → Lower score based on severity
-    """
-    if pred_class == "Clean":
-        return 90 + (confidences.max().item() * 10)  # High score for clean panels
+    model = get_mobilenetv3().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
     
-    # Reduce score based on confidence in problematic class
-    return max(30, 80 - (confidences.max().item() * 50))  # Score between 30-80
-
-# Evaluation (per image)
-for idx, (image, _) in enumerate(test_loader):
-    image = image.to(DEVICE)
-
+    criterion = nn.BCEWithLogitsLoss()
+    total_loss = 0.0
+    correct = 0
+    total = 0
+    
     with torch.no_grad():
-        outputs = model(image)
-        confidences = torch.softmax(outputs, dim=1)  # Convert logits to probabilities
-        predicted_class_idx = torch.argmax(confidences).item()
-        predicted_class = CLASS_NAMES[predicted_class_idx]
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+            
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
+            correct += (predicted == labels).sum().item()
+            total += labels.numel()
+    
+    accuracy = correct / total * 100
+    avg_loss = total_loss / len(test_loader)
+    
+    print(f"Test Accuracy: {accuracy:.2f}%")
+    print(f"Test Loss: {avg_loss:.4f}")
 
-        # Calculate inspection score
-        score = get_inspection_score(predicted_class, confidences)
-
-        # Get cleaning suggestions if needed
-        cleaning_tip = CLEANING_SUGGESTIONS.get(predicted_class, "No cleaning required.")
-
-        print(f"\n--- Image {idx+1} ---")
-        print(f"Predicted Class: {predicted_class}")
-        print(f"Inspection Score: {score:.2f}/100")
-        print(f"Suggestion: {cleaning_tip}")
+if __name__ == "__main__":
+    test_model()
