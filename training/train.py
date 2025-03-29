@@ -1,44 +1,22 @@
-import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import pandas as pd
 import torchvision.transforms as transforms
 import torchvision.models as models
 from torch.utils.data import DataLoader, Dataset
-from PIL import Image
 from tqdm import tqdm
+import pandas as pd
+import os
+from PIL import Image
+import warnings
+import numpy as np
 
-# Paths
-train_dir = r"D:\Projects\SPICE.AI\dataset\splitted\train"
-csv_path = os.path.join(train_dir, "_classes.csv")
+warnings.filterwarnings("ignore", category=UserWarning)  
 
-val_dir = r"D:\Projects\SPICE.AI\dataset\splitted\val"
-val_csv_path = os.path.join(val_dir, "_classes.csv")
-
-save_path = r"D:\Projects\SPICE.AI\models\model.pth"
-
-# Check device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
-# Load CSV
-df_train = pd.read_csv(csv_path)
-df_val = pd.read_csv(val_csv_path)
-class_names = df_train.columns[1:].tolist()
-num_classes = len(class_names)
-
-# Image Transformations (No Augmentation)
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-
-# Custom Dataset
+# Dataset Class
 class SolarPanelDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None):
-        self.data = pd.read_csv(csv_file)
+    def __init__(self, csv_path, img_dir, transform=None):
+        self.data = pd.read_csv(csv_path)
         self.img_dir = img_dir
         self.transform = transform
 
@@ -46,100 +24,125 @@ class SolarPanelDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        row = self.data.iloc[idx]
-        img_path = os.path.join(self.img_dir, row['Filename'])
-        image = Image.open(img_path).convert("RGB")
+        image_path = os.path.join(self.img_dir, self.data.iloc[idx, 0])  
+        image = Image.open(image_path).convert("RGB")
+
         if self.transform:
             image = self.transform(image)
-        labels = torch.tensor(row[1:].values.astype(float), dtype=torch.float32)
+
+        labels = torch.tensor(self.data.iloc[idx, 1:].astype(int).values, dtype=torch.float32)
         return image, labels
 
-# DataLoaders (Batch Size 128)
-batch_size = 128  # Updated batch size
-train_dataset = SolarPanelDataset(csv_path, train_dir, transform=transform)
-val_dataset = SolarPanelDataset(val_csv_path, val_dir, transform=transform)
+# Data Augmentation & Normalization
+train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(224),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+valid_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
 
-# Model (ResNet50)
-model = models.resnet50(pretrained=True)
-model.fc = nn.Sequential(
-    nn.Linear(model.fc.in_features, 512),
-    nn.ReLU(),
-    nn.Dropout(0.4),
-    nn.Linear(512, num_classes),
-    nn.Sigmoid()
-)
-model = model.to(device)
+# Paths for Training and Validation Data
+train_csv = "D:/Projects/SPICE.AI/dataset/splitted/train/_classes.csv"
+train_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/train"
+val_csv = "D:/Projects/SPICE.AI/dataset/splitted/val/_classes.csv"
+val_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/val"
 
-# Loss and Optimizer
-criterion = nn.BCELoss()
-optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.5, verbose=True)
+# Load Datasets
+train_dataset = SolarPanelDataset(train_csv, train_img_dir, train_transform)
+valid_dataset = SolarPanelDataset(val_csv, val_img_dir, valid_transform)
 
-# Mixed Precision (Faster Training)
-scaler = torch.cuda.amp.GradScaler()
+# DataLoader Optimizations
+train_loader = DataLoader(train_dataset, batch_size=128, num_workers=4, shuffle=True, pin_memory=True, persistent_workers=True)
+valid_loader = DataLoader(valid_dataset, batch_size=128, num_workers=4, shuffle=False, pin_memory=True, persistent_workers=True)
 
-# Early Stopping
-best_val_loss = float("inf")
-patience = 5
-counter = 0
+# Define Model with Dropout
+def get_mobilenet_v3():
+    model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
+    num_ftrs = model.classifier[0].in_features
+    model.classifier = nn.Sequential(
+        nn.Linear(num_ftrs, 512),
+        nn.ReLU(),
+        nn.Dropout(0.3),  
+        nn.Linear(512, 9)  
+    )
+    return model
 
-# Training Loop
-epochs = 20
-for epoch in range(epochs):
-    model.train()
-    train_loss = 0
+# Training Function
+def train_model():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    loop = tqdm(train_loader, leave=True)
-    for images, labels in loop:
-        images, labels = images.to(device), labels.to(device)
+    model = get_mobilenet_v3().to(device)
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)  
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=3, verbose=True)
 
-        optimizer.zero_grad()
-        with torch.cuda.amp.autocast():  # Mixed precision training
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+    scaler = torch.amp.GradScaler()
+    epochs = 25  
+    best_val_loss = np.inf
+    early_stop_count = 0
+    patience = 5  
 
-        scaler.scale(loss).backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient Clipping
-        scaler.step(optimizer)
-        scaler.update()
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
 
-        train_loss += loss.item()
+        for images, labels in progress_bar:
+            images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
 
-        loop.set_description(f"Epoch [{epoch+1}/{epochs}]")
-        loop.set_postfix(loss=loss.item())
+            optimizer.zero_grad()
+            with torch.amp.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                outputs = model(images)
+                loss = criterion(outputs, labels)
 
-    avg_train_loss = train_loss / len(train_loader)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
-    # Validation Step
-    model.eval()
-    val_loss = 0
-    with torch.no_grad():
-        for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            val_loss += loss.item()
+            running_loss += loss.item()
+            progress_bar.set_postfix(loss=running_loss / (progress_bar.n + 1))
 
-    avg_val_loss = val_loss / len(val_loader)
-    print(f"Epoch {epoch+1}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        avg_train_loss = running_loss / len(train_loader)
 
-    # Save best model
-    if avg_val_loss < best_val_loss:
-        best_val_loss = avg_val_loss
-        torch.save(model.state_dict(), save_path)
-        print(f"Model saved at {save_path}")
-        counter = 0
-    else:
-        counter += 1
+        # Validation Phase
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for images, labels in valid_loader:
+                images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
 
-    scheduler.step(avg_val_loss)
+        avg_val_loss = val_loss / len(valid_loader)
+        print(f"Epoch [{epoch+1}/{epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
 
-    # Early Stopping
-    if counter >= patience:
-        print("Early stopping triggered!")
-        break
+        # Learning Rate Adjustment
+        scheduler.step(avg_val_loss)
 
-print(f"Training Complete. Best model saved at {save_path}.")
+        # Early Stopping
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), "solar_panel_mobilenetv3_best.pth")  
+            early_stop_count = 0  
+        else:
+            early_stop_count += 1
+            if early_stop_count >= patience:
+                print("Early stopping triggered. Stopping training.")
+                break
+
+    print("Training Complete. Best Model Saved.")
+
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+    train_model()
