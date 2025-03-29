@@ -1,3 +1,6 @@
+import os
+import shutil
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -5,8 +8,6 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-import pandas as pd
-import os
 from PIL import Image
 import warnings
 
@@ -23,30 +24,24 @@ class SolarPanelDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # Get image filename and construct full path
         image_filename = self.data.iloc[idx, 0]
         image_path = os.path.join(self.img_dir, image_filename)
 
-        # Check if the file exists
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
-
+        
         try:
-            # Open and convert the image to RGB format
             image = Image.open(image_path).convert("RGB")
         except Exception as e:
             raise RuntimeError(f"Error loading image {image_path}: {e}")
-
-        # Apply transformations if provided
+        
         if self.transform:
             image = self.transform(image)
 
-        # Extract labels from the CSV file (convert to tensor)
-        labels = torch.tensor(self.data.iloc[idx, 1:].astype(int).values, dtype=torch.float32)
+        labels = torch.tensor(self.data.iloc[idx, 1:].values, dtype=torch.float32)
         return image, labels
 
-
-# Data Augmentation & Normalization for Training and Validation
+# Data Augmentation & Normalization
 train_transform = transforms.Compose([
     transforms.RandomResizedCrop(224),
     transforms.RandomHorizontalFlip(),
@@ -62,7 +57,7 @@ valid_transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Paths for Training and Validation Data
+# Paths
 train_csv = "D:/Projects/SPICE.AI/dataset/splitted/train/_classes.csv"
 train_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/train"
 val_csv = "D:/Projects/SPICE.AI/dataset/splitted/val/_classes.csv"
@@ -73,31 +68,37 @@ train_dataset = SolarPanelDataset(train_csv, train_img_dir, train_transform)
 valid_dataset = SolarPanelDataset(val_csv, val_img_dir, valid_transform)
 
 # Data Loaders
-train_loader = DataLoader(train_dataset, batch_size=64, num_workers=0, shuffle=True, pin_memory=True)
-valid_loader = DataLoader(valid_dataset, batch_size=64, num_workers=0, shuffle=False, pin_memory=True)
+train_loader = DataLoader(train_dataset, batch_size=64, num_workers=4, shuffle=True, pin_memory=True)
+valid_loader = DataLoader(valid_dataset, batch_size=64, num_workers=4, shuffle=False, pin_memory=True)
 
-# Define Model Function with Dropout for Regularization
+# Define Model Function
 def get_mobilenet_v3():
     model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
     num_ftrs = model.classifier[0].in_features
     model.classifier = nn.Sequential(
         nn.Linear(num_ftrs, 512),
         nn.ReLU(),
-        nn.Dropout(0.5),  # Increased dropout rate for regularization
-        nn.Linear(512, 8)  
+        nn.Dropout(0.5),
+        nn.Linear(512, 8)
     )
     return model
 
-# Training Function with Model Saving for Each Epoch
+# Training Function
 def train_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     model = get_mobilenet_v3().to(device)
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
-    
+
+    # Compute class weights (handling imbalance)
+    class_counts = train_dataset.data.iloc[:, 1:].sum(axis=0).values
+    pos_weight = torch.tensor(1.0 / (class_counts / (class_counts.sum() + 1e-6)), dtype=torch.float32).to(device)
+
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    optimizer = optim.AdamW(model.parameters(), lr=0.0001, weight_decay=1e-4)
+
     epochs = 25  
+    best_val_acc = 0.0  # Track best model
     save_path = "D:/Projects/SPICE.AI/models"
     os.makedirs(save_path, exist_ok=True)
 
@@ -110,17 +111,17 @@ def train_model():
         for images, labels in progress_bar:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
-            with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-            
+            outputs = model(images)
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            
             running_loss += loss.item()
+
+            # Accuracy Calculation
             predicted_train = (torch.sigmoid(outputs) > 0.5).float()
-            correct_train += (predicted_train == labels).sum().item()
-            total_train += labels.numel()
+            correct_train += torch.all(predicted_train == labels, dim=1).sum().item()
+            total_train += labels.size(0)
+
             progress_bar.set_postfix(loss=running_loss / (progress_bar.n + 1))
 
         avg_train_loss = running_loss / len(train_loader)
@@ -132,23 +133,25 @@ def train_model():
         with torch.no_grad():
             for images_val, labels_val in valid_loader:
                 images_val, labels_val = images_val.to(device), labels_val.to(device)
-                with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
-                    outputs_val = model(images_val)
-                    loss_val = criterion(outputs_val, labels_val)
+                outputs_val = model(images_val)
+                loss_val = criterion(outputs_val, labels_val)
                 val_loss += loss_val.item()
+                
                 predicted_val = (torch.sigmoid(outputs_val) > 0.5).float()
-                correct_val += (predicted_val == labels_val).sum().item()
-                total_val += labels_val.numel()
+                correct_val += torch.all(predicted_val == labels_val, dim=1).sum().item()
+                total_val += labels_val.size(0)
 
         avg_val_loss = val_loss / len(valid_loader)
         val_accuracy = correct_val / total_val * 100
         
         print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
-        # Save Model for Each Epoch with Epoch Number in Filename
-        model_save_path = os.path.join(save_path, f"spice_ai_mobilenetv3_epoch_{epoch+1}.pth")
-        torch.save(model.state_dict(), model_save_path)
-        print(f"Model saved at epoch {epoch+1}.")
+        # Save Best Model
+        if val_accuracy > best_val_acc:
+            best_val_acc = val_accuracy
+            model_save_path = os.path.join(save_path, "best_spice_ai_mobilenetv3.pth")
+            torch.save(model.state_dict(), model_save_path)
+            print(f"Best Model Updated (Val Acc: {best_val_acc:.2f}%)")
 
     print("Training Complete.")
 
