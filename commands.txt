@@ -11,8 +11,9 @@ python dataset/merge.py
 # Step 2: Split dataset
 python dataset/split.py
 
-# Step 3: Train model
-python training/train.py
+# Step 3: Train & fine tune model
+python training/train_v0.1.py
+python training/train_v1.1.py
 
 # Step 4: Test model
 python testing/test.py

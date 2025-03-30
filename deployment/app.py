@@ -246,7 +246,13 @@ CLASS_CONFIG = {
     }
 }
 
-# Main Function for Streamlit App
+# Function to print label analysis to the terminal
+def print_label_analysis(predictions):
+    print("--- Label Analysis ---")
+    for label, score in predictions.items():
+        print(f"{label}: {score:.1f}%")
+    print("----------------------")
+
 # Main Function for Streamlit App
 def main():
     st.set_page_config(page_title="SPICE.AI: Solar Panel Inspection", layout="wide")
@@ -314,7 +320,9 @@ def main():
                         final_score, weighted_scores = compute_inspection_score(st.session_state.predictions)
                         st.session_state.inspection_score = final_score
 
-                        # Display a message instead of quick analysis
+                        # Print label analysis to the terminal
+                        print_label_analysis(st.session_state.predictions)
+
                         st.success("Inspection score generated! Check it out in the 'Total Score' tab.")
             except Exception as e:
                 st.error(f"An error occurred during prediction: {e}")
@@ -361,28 +369,28 @@ def main():
                     elif score > 40:
                         emoji = "🟠"  # Orange
                     else:
-                        emoji = "🟢"  # Green
-                    st.write(f"- **{label}**: {score:.1f}% {emoji}")
+                        emoji = "🟡"  # Yellow
+                    st.write(f"{label}: {score:.1f}% {emoji}")
             else:
-                st.success("No significant issues detected.")
+                st.write("No significant issues detected.")
         else:
-            st.write("Upload an image to see the label analysis.")
-
+            st.write("Upload an image to view label analysis.")
+            
     with tabs[4]:
         st.header("Outcome")
         
-        if 'predictions' in st.session_state:
-            predictions = st.session_state.predictions
+        if 'inspection_score' in st.session_state and 'predictions' in st.session_state:
+            inspection_score = st.session_state["inspection_score"]
+            predictions = st.session_state["predictions"]
             
-            # Display cleaning suggestions
-            suggestions = cleaning_suggestions(predictions)
+            # Cleaning Suggestions
             st.subheader("Cleaning Suggestions:")
-            for suggestion in suggestions:
-                st.write(f"- {suggestion}")
-                
+            suggested_actions = cleaning_suggestions(predictions)
+            for suggestion in suggested_actions:
+                st.markdown(f"- {suggestion}")
+            
         else:
-            st.write("Upload an image to see the outcome.")
+            st.write("Upload an image to view outcome.")
 
-# Run the Streamlit App
 if __name__ == "__main__":
     main()
