@@ -1,19 +1,19 @@
 import os
-import shutil
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.transforms as transforms
 import torchvision.models as models
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from PIL import Image
+import cv2
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# Dataset Class
+# Custom Dataset
 class SolarPanelDataset(Dataset):
     def __init__(self, csv_path, img_dir, transform=None):
         self.data = pd.read_csv(csv_path)
@@ -29,32 +29,34 @@ class SolarPanelDataset(Dataset):
 
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
-        
-        try:
-            image = Image.open(image_path).convert("RGB")
-        except Exception as e:
-            raise RuntimeError(f"Error loading image {image_path}: {e}")
-        
-        if self.transform:
-            image = self.transform(image)
 
-        labels = torch.tensor(self.data.iloc[idx, 1:].values, dtype=torch.float32)
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        if self.transform:
+            image = self.transform(image=image)["image"]
+
+        label_values = self.data.iloc[idx, 1:].astype(float).values
+        labels = torch.tensor(label_values, dtype=torch.float32)
+
         return image, labels
 
-# Data Augmentation & Normalization
-train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(224),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(10),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+# Data Augmentation using Albumentations
+train_transform = A.Compose([
+    A.RandomResizedCrop(224, 224, scale=(0.8, 1.0)),
+    A.HorizontalFlip(p=0.5),
+    A.Rotate(limit=15, p=0.5),
+    A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, p=0.5),
+    A.GaussianBlur(blur_limit=3, p=0.2),
+    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ToTensorV2(),
 ])
 
-valid_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+valid_transform = A.Compose([
+    A.Resize(224, 224),
+    A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ToTensorV2(),
 ])
 
 # Paths
@@ -71,16 +73,11 @@ valid_dataset = SolarPanelDataset(val_csv, val_img_dir, valid_transform)
 train_loader = DataLoader(train_dataset, batch_size=64, num_workers=4, shuffle=True, pin_memory=True)
 valid_loader = DataLoader(valid_dataset, batch_size=64, num_workers=4, shuffle=False, pin_memory=True)
 
-# Define Model Function
-def get_mobilenet_v3():
+# Define MobileNetV3-Large Model
+def get_mobilenet():
     model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
-    num_ftrs = model.classifier[0].in_features
-    model.classifier = nn.Sequential(
-        nn.Linear(num_ftrs, 512),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(512, 8)
-    )
+    num_ftrs = model.classifier[3].in_features
+    model.classifier[3] = nn.Linear(num_ftrs, 8)  # 8 output classes
     return model
 
 # Training Function
@@ -88,17 +85,17 @@ def train_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = get_mobilenet_v3().to(device)
+    model = get_mobilenet().to(device)
 
-    # Compute class weights (handling imbalance)
+    # Compute Class Weights
     class_counts = train_dataset.data.iloc[:, 1:].sum(axis=0).values
     pos_weight = torch.tensor(1.0 / (class_counts / (class_counts.sum() + 1e-6)), dtype=torch.float32).to(device)
 
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight, reduction='mean')
     optimizer = optim.AdamW(model.parameters(), lr=0.0001, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
 
-    epochs = 25  
-    best_val_acc = 0.0  # Track best model
+    epochs = 50
     save_path = "D:/Projects/SPICE.AI/models"
     os.makedirs(save_path, exist_ok=True)
 
@@ -117,12 +114,14 @@ def train_model():
             optimizer.step()
             running_loss += loss.item()
 
-            # Accuracy Calculation
+            # Accuracy Calculation (Fixed for Multi-Label Classification)
             predicted_train = (torch.sigmoid(outputs) > 0.5).float()
-            correct_train += torch.all(predicted_train == labels, dim=1).sum().item()
-            total_train += labels.size(0)
+            correct_train += (predicted_train == labels).sum().item()
+            total_train += labels.numel()
 
             progress_bar.set_postfix(loss=running_loss / (progress_bar.n + 1))
+
+        scheduler.step()
 
         avg_train_loss = running_loss / len(train_loader)
         train_accuracy = correct_train / total_train * 100
@@ -138,22 +137,21 @@ def train_model():
                 val_loss += loss_val.item()
                 
                 predicted_val = (torch.sigmoid(outputs_val) > 0.5).float()
-                correct_val += torch.all(predicted_val == labels_val, dim=1).sum().item()
-                total_val += labels_val.size(0)
+                correct_val += (predicted_val == labels_val).sum().item()
+                total_val += labels_val.numel()
 
         avg_val_loss = val_loss / len(valid_loader)
         val_accuracy = correct_val / total_val * 100
         
-        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
+        # Status Update after Epoch
+        print(f"Epoch [{epoch+1}/{epochs}] Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}% | Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
-        # Save Best Model
-        if val_accuracy > best_val_acc:
-            best_val_acc = val_accuracy
-            model_save_path = os.path.join(save_path, "best_spice_ai_mobilenetv3.pth")
-            torch.save(model.state_dict(), model_save_path)
-            print(f"Best Model Updated (Val Acc: {best_val_acc:.2f}%)")
+        # Save Model Every Epoch
+        model_save_path = os.path.join(save_path, f"spice_ai_mobilenet_epoch{epoch+1}.pth")
+        torch.save(model.state_dict(), model_save_path)
+        print(f"Model Saved: {model_save_path}")
 
-    print("Training Complete.")
+    print("Training Complete")
 
 if __name__ == '__main__':
     from multiprocessing import freeze_support
