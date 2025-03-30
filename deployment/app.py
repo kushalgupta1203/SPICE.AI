@@ -2,9 +2,11 @@ import streamlit as st
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
+from io import BytesIO
 import torch.nn as nn
 import torchvision.models as models
 import numpy as np
+import requests
 
 # Load Model Function
 def load_model(model_path, device):
@@ -262,9 +264,19 @@ def main():
     
     # Title and Current Date/Time Display
     try:
-        logo = Image.open("https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo.png?raw=true")
+        # Use requests to fetch the image from the URL
+        response = requests.get("https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo.png?raw=true", stream=True)
+        response.raise_for_status()  # Raise an exception for bad status codes
+
+        # Open the image using PIL
+        logo = Image.open(BytesIO(response.content))
         st.image(logo, use_container_width=True)  # Updated to use_container_width
-    except FileNotFoundError:
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching logo: {e}")
+        st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
+        st.warning("Logo not found.  Using default title.")
+    except Exception as e:
+        st.error(f"Error opening logo: {e}")
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
         st.warning("Logo not found.  Using default title.")
     
