@@ -43,7 +43,7 @@ val_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/val"
 test_csv = "D:/Projects/SPICE.AI/dataset/splitted/test/_classes.csv"
 test_img_dir = "D:/Projects/SPICE.AI/dataset/splitted/test"
 
-model_path = "D:/Projects/SPICE.AI/models/spice_ai_mobilenetv3_v1.0.pth"
+model_path = "D:/Projects/SPICE.AI/models/spice_ai_mobilenetv3_v2.0.pth"
 
 # Load Dataset
 train_dataset = SolarPanelDataset(train_csv, train_img_dir, transform)
