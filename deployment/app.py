@@ -270,7 +270,6 @@ def main():
         st.header("User Guide")
         
         st.markdown("""
-            ### How to Use:
             Follow these steps to analyze your solar panel image:
             - **Upload an Image**: Go to the 'Upload Image' tab and upload a clear image of your solar panel.
             - **Preview**: After uploading the image successfully you will see a preview of it.
