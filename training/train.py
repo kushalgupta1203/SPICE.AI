@@ -41,13 +41,13 @@ class SolarPanelDataset(Dataset):
 
         return image, labels
 
+
 # Data Augmentation using Albumentations
 train_transform = A.Compose([
-    A.RandomResizedCrop(224, 224, scale=(0.75, 1.0)),
+    A.RandomResizedCrop(224, 224, scale=(0.8, 1.0)),
     A.HorizontalFlip(p=0.5),
-    A.VerticalFlip(p=0.2),
-    A.Rotate(limit=20, p=0.5),
-    A.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1, p=0.5),
+    A.Rotate(limit=15, p=0.5),
+    A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, p=0.5),
     A.GaussianBlur(blur_limit=3, p=0.2),
     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ToTensorV2(),
@@ -77,10 +77,7 @@ valid_loader = DataLoader(valid_dataset, batch_size=64, num_workers=4, shuffle=F
 def get_mobilenet():
     model = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
     num_ftrs = model.classifier[3].in_features
-    model.classifier[3] = nn.Sequential(
-        nn.Dropout(0.3),  # Added dropout to prevent overfitting
-        nn.Linear(num_ftrs, 8)  # 8 output classes
-    )
+    model.classifier[3] = nn.Linear(num_ftrs, 8)  # 8 output classes
     return model
 
 # Training Function
@@ -117,7 +114,7 @@ def train_model():
             optimizer.step()
             running_loss += loss.item()
 
-            # Accuracy Calculation
+            # Accuracy Calculation (Fixed for Multi-Label Classification)
             predicted_train = (torch.sigmoid(outputs) > 0.5).float()
             correct_train += (predicted_train == labels).sum().item()
             total_train += labels.numel()
@@ -125,6 +122,7 @@ def train_model():
             progress_bar.set_postfix(loss=running_loss / (progress_bar.n + 1))
 
         scheduler.step()
+
         avg_train_loss = running_loss / len(train_loader)
         train_accuracy = correct_train / total_train * 100
 
@@ -145,8 +143,10 @@ def train_model():
         avg_val_loss = val_loss / len(valid_loader)
         val_accuracy = correct_val / total_val * 100
         
+        # Status Update after Epoch
         print(f"Epoch [{epoch+1}/{epochs}] Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}% | Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
+        # Save Model Every Epoch
         model_save_path = os.path.join(save_path, f"spice_ai_mobilenet_epoch{epoch+1}.pth")
         torch.save(model.state_dict(), model_save_path)
         print(f"Model Saved: {model_save_path}")

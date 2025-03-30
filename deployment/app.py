@@ -5,7 +5,6 @@ from PIL import Image
 import torch.nn as nn
 import torchvision.models as models
 import numpy as np
-from datetime import datetime
 
 # Load Model Function
 def load_model(model_path, device):
@@ -257,16 +256,15 @@ def main():
     
     # Title and Current Date/Time Display
     try:
-        logo = Image.open("D:\\Projects\\SPICE.AI\\deployment\\logo.jpg")
+        logo = Image.open("D:\\Projects\\SPICE.AI\\deployment\\logo.png")
         st.image(logo, use_container_width=True)  # Updated to use_container_width
     except FileNotFoundError:
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
         st.warning("Logo not found.  Using default title.")
     
-    st.caption(f"Current date: {datetime.now().strftime('%A %B %d %Y %I:%M %p %Z')}")
     
     # Tabs for Different Sections
-    tabs = st.tabs(["📖 How to Use", "📤 Upload Image", "🏆 Total Score", "📊 Label Analysis", "🔍 Outcome"])
+    tabs = st.tabs(["How to Use", "Upload Image", "Total Score", "Label Analysis", "Outcome"])
     
     with tabs[0]:
         st.header("User Guide")
@@ -283,7 +281,7 @@ def main():
     # Store model, image, tensor, and predictions in session state
     if 'model' not in st.session_state:
         try:
-            model_path = r"D:\Projects\SPICE.AI\models\old\spice_ai_mobilenetv3_v1.0.pth"
+            model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v1.0.pth"
             st.session_state.model = load_model(model_path, device)
         except Exception as e:
             st.error(f"Error loading model: {e}")
