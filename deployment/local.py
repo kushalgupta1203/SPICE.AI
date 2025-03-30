@@ -7,6 +7,7 @@ import torch.nn as nn
 import torchvision.models as models
 import numpy as np
 import requests
+import pandas as pd
 
 # Load Model Function
 def load_model(model_path, device, num_classes=8):
@@ -50,6 +51,7 @@ def open_image(uploaded_file):
         st.error(f"Error opening image: {e}")
         return None
 
+
 # Function to display a smaller version of the image
 def display_compressed_image(image, max_width=400):
     width, height = image.size
@@ -71,116 +73,151 @@ def display_total_score(inspection_score):
     st.markdown(f"## Total Inspection Score: {inspection_score:.1f}/100")  # Force 1 decimal
 
     # Add score classification with more granular thresholds
-    if inspection_score >= 85:
+    if inspection_score >= 90:
         st.success("EXCELLENT CONDITION")
+    elif inspection_score >= 80:
+        st.success("VERY GOOD CONDITION")
     elif inspection_score >= 70:
         st.success("GOOD CONDITION")
-    elif inspection_score >= 55:
+    elif inspection_score >= 60:
+        st.warning("ABOVE AVERAGE CONDITION")
+    elif inspection_score >= 50:
         st.warning("FAIR CONDITION")
-    elif inspection_score >= 35:
+    elif inspection_score >= 40:
         st.warning("POOR CONDITION")
+    elif inspection_score >= 30:
+        st.error("VERY POOR CONDITION")
     else:
         st.error("CRITICAL CONDITION")
-
-# Compute Inspection Score with Weighted Ranges
-def compute_inspection_score(predictions):
-    total = 0
-    weighted_scores = {}
-
-    # Add a small randomization factor (±3%) for similar cases
-    randomization = np.random.uniform(-3, 3)
-
-    for label, score in predictions.items():
-        config = CLASS_CONFIG[label]
-        weighted_value = get_weighted_value(score, config["ranges"])
-        weighted_scores[label] = weighted_value
-        total += weighted_value
-
-    max_possible = sum(max(w for _, _, w in cfg["ranges"]) * 100
-                      for cfg in CLASS_CONFIG.values())
-    normalized = (total / abs(max_possible)) * 100 if max_possible != 0 else 0
-
-    # Apply adjustments for score variance and easier interpretation
-    normalized = normalized * 1.2  # Increase sensitivity
-
-    # Add randomization factor for similar inputs
-    normalized += randomization
-
-    normalized = np.clip(normalized, 0, 100)  # Ensure score stays within 0-100
-
-    # Apply a more aggressive sigmoid function for better score distribution
-    final_score = 100 * (1 / (1 + np.exp(-normalized / 15 + 3)))  # Tunable parameters
-
-    # Ensure exactly 1 decimal place
-    final_score = round(final_score, 1)
-
-    return final_score, weighted_scores
-
-def format_score(score):
-    return f"{score:.1f}"
-
-# Get Weighted Value Based on Ranges
-def get_weighted_value(score, ranges):
-    for min_val, max_val, weight in ranges:
-        if min_val <= score < max_val:
-            return score * weight
-    return 0  # Default to 0 if no range matches
 
 # Cleaning Suggestions Based on Scores
 def cleaning_suggestions(predictions):
     suggestions = []
-
     # Check for evenly cleaned panel
     if predictions["Clean Panel"] > 70 and predictions["Physical Damage"] < 10:
         return ["No cleaning required. Panel appears to be in excellent condition."]
 
-    if predictions["Physical Damage"] > 20:
+    if predictions["Physical Damage"] > 30:
         suggestions.append("Repair physical damage immediately")
-    if predictions["Electrical Damage"] > 20:
+    if predictions["Electrical Damage"] > 40:
         suggestions.append("Consult electrical engineer")
-    if predictions["Snow Covered"] > 20:
+    if predictions["Snow Covered"] > 50:
         suggestions.append("Remove snow accumulation")
-    if predictions["Water Obstruction"] > 20:
+    if predictions["Water Obstruction"] > 40:
         suggestions.append("Clear water obstructions")
-    if predictions["Foreign Particle Contamination"] > 20:
+    if predictions["Foreign Particle Contamination"] > 40:
         suggestions.append("Clean foreign particles")
-    if predictions["Bird Interference"] > 20:
+    if predictions["Bird Interference"] > 40:
         suggestions.append("Install bird deterrents")
     return suggestions or ["No critical issues detected"]
+
+# Enhanced Get Weighted Value Based on Ranges with Smoother Transitions
+def get_weighted_value(score, ranges):
+    # Direct match within a range
+    for min_val, max_val, weight in ranges:
+        if min_val <= score < max_val:
+            # Add smooth transition near range boundaries (within 5 points)
+            if score - min_val < 5 and min_val > 0:
+                # Transitioning from previous range
+                prev_weight = 0
+                for prev_min, prev_max, prev_w in ranges:
+                    if prev_max == min_val:
+                        prev_weight = prev_w
+                        break
+
+                # Calculate blend factor (0-1) for smooth transition
+                blend = (score - min_val) / 5
+                # Interpolate between previous weight and current weight
+                interpolated_weight = prev_weight * (1 - blend) + weight * blend
+                return interpolated_weight
+
+            elif max_val - score < 5 and max_val < 101:
+                # Transitioning to next range
+                next_weight = 0
+                for next_min, next_max, next_w in ranges:
+                    if next_min == max_val:
+                        next_weight = next_w
+                        break
+
+                # Calculate blend factor (0-1) for smooth transition
+                blend = (max_val - score) / 5
+                # Interpolate between current weight and next weight
+                interpolated_weight = weight * blend + next_weight * (1 - blend)
+                return interpolated_weight
+
+            # Standard case - in the middle of a range
+            return weight
+    
+    # Default fallback - should rarely occur if ranges are properly defined
+    return 0
+
+# Compute Inspection Score with Enhanced Weighting and Variation
+def compute_inspection_score(predictions):
+    total = 0
+    weighted_scores = {}
+
+    # Calculate base weighted score with non-linear scaling
+    for label, score in predictions.items():
+        if label == "Panel Detected":
+            continue  # Skip Panel Detected label
+
+        config = CLASS_CONFIG[label]
+        weighted_value = get_weighted_value(score, config["ranges"])
+
+        # Apply importance multiplier based on label
+        if label == "Physical Damage" or label == "Electrical Damage":
+            importance_factor = 1.3
+        elif label == "Clean Panel":
+            importance_factor = 1.2
+        else:
+            importance_factor = 1.0
+
+        weighted_value *= importance_factor
+        weighted_scores[label] = weighted_value * score
+        total += weighted_value * score
+
+    # Calculate max possible score more accurately
+    max_possible = sum(100 * max(w for _, _, w in cfg["ranges"]) *
+                      (1.3 if label in ["Physical Damage", "Electrical Damage"] else
+                       1.2 if label == "Clean Panel" else 1.0)
+                      for label, cfg in CLASS_CONFIG.items() if label != "Panel Detected")
+
+    # Normalize with better scaling
+    normalized = (total / abs(max_possible)) * 100 if max_possible != 0 else 0
+
+    # Non-linear transformation (S-curve)
+    x = normalized / 100.0
+    transformed = 0.5 * (np.tanh(3 * (x - 0.5)) + 1)  # S-curve
+    final_score = transformed * 100
+    final_score = np.clip(final_score, 0, 100)
+
+    return final_score
 
 # Scoring Configuration for Each Class
 CLASS_CONFIG = {
     "Panel Detected": {
-        "ranges": [(0, 20, 0), (20, 60, 0.8), (60, 101, 1.0)],
-        "description": "Detection confidence level"
+        "ranges": [(0, 10, 0), (10, 20, 0), (20, 30, 0.05), (30, 40, 0.1), (40, 50, 0.2), (50, 60, 0.6), (60, 70, 0.6), (70, 80, 0.7), (80, 90, 0.7), (90, 101, 0.7)]
     },
     "Clean Panel": {
-        "ranges": [(0, 20, 0.1), (20, 40, 0.3), (40, 70, 0.6), (70, 101, 1.0)],
-        "description": "Cleanliness assessment"
+        "ranges": [(0, 10, 0.05), (10, 20, 0.05), (20, 30, 0.1), (30, 40, 0.15), (40, 50, 0.2), (50, 60, 0.2), (60, 70, 0.25), (70, 80, 0.25), (80, 90, 0.25), (90, 101, 0.3)]
     },
     "Physical Damage": {
-        "ranges": [(0, 10, -0.2), (10, 30, -0.5), (30, 101, -1.5)],
-        "description": "Structural integrity evaluation"
+        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     },
     "Electrical Damage": {
-        "ranges": [(0, 10, -0.2), (10, 30, -0.5), (30, 101, -1.5)],
-        "description": "Electrical safety evaluation"
+        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     },
     "Snow Covered": {
-        "ranges": [(0, 20, -0.1), (20, 40, -0.3), (40, 101, -1.0)],
-        "description": "Snow coverage impact"
+        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     },
     "Water Obstruction": {
-        "ranges": [(0, 20, -0.1), (20, 40, -0.3), (40, 101, -1.0)],
-        "description": "Water obstruction impact"
+        "ranges": [(0, 10, 0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     },
     "Foreign Particle Contamination": {
-        "ranges": [(0, 20, -0.1), (20, 40, -0.3), (40, 101, -1.5)],
-        "description": "Impact of foreign particles"
+        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     },
     "Bird Interference": {
-        "ranges": [(0, 20, -0.1), (20, 40, -0.3), (40, 101, -1.5)],
-        "description": "Impact of bird interference"
+        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
     }
 }
 
@@ -198,24 +235,42 @@ def main():
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Title and Current Date/Time Display
+    # Use a CSS media query approach for responsive images
+    st.markdown("""
+        <style>
+        .desktop-logo {
+            display: block;
+        }
+        .mobile-logo {
+            display: none;
+        }
+
+        /* Media query for mobile devices */
+        @media (max-width: 768px) {
+            .desktop-logo {
+                display: none;
+            }
+            .mobile-logo {
+                display: block;
+            }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Display both logos with appropriate CSS classes
     try:
-        # Use requests to fetch the image from the URL
-        response = requests.get("https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo.png?raw=true", stream=True)
-        response.raise_for_status()  # Raise an exception for bad status codes
-
-        # Open the image using PIL
-        logo = Image.open(BytesIO(response.content))
-        st.image(logo, use_container_width=True)  # Updated to use_container_width
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching logo: {e}")
-        st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
-        st.warning("Logo not found.  Using default title.")
+        st.markdown("""
+            <div class="desktop-logo">
+                <img src="https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true" style="width: 100%;">
+            </div>
+            <div class="mobile-logo">
+                <img src="https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true" style="width: 100%;">
+            </div>
+        """, unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Error opening logo: {e}")
+        st.error(f"Error with logo display: {e}")
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
-        st.warning("Logo not found.  Using default title.")
-
+        st.warning("Logo not found. Using default title.")
 
     # Tabs for Different Sections
     tabs = st.tabs(["How to Use", "Upload Image", "Total Score", "Label Analysis", "Outcome"])
@@ -241,14 +296,23 @@ def main():
             st.error(f"Error loading panel detection model: {e}")
             st.session_state.panel_detection_model = None
 
-    if 'inspection_model' not in st.session_state:
+    if 'inspection_model_v11' not in st.session_state:
         try:
             inspection_model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v1.1.pth"
             # Load the inspection model (v1.1) also with 8 classes
-            st.session_state.inspection_model = load_model(inspection_model_path, device, num_classes=8)
+            st.session_state.inspection_model_v11 = load_model(inspection_model_path, device, num_classes=8)
         except Exception as e:
-            st.error(f"Error loading inspection model: {e}")
-            st.session_state.inspection_model = None
+            st.error(f"Error loading inspection model v1.1: {e}")
+            st.session_state.inspection_model_v11 = None
+
+    if 'inspection_model_v20' not in st.session_state:
+        try:
+            inspection_model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v2.0.pth"
+            # Load the inspection model (v2.0)
+            st.session_state.inspection_model_v20 = load_model(inspection_model_path, device, num_classes=8)
+        except Exception as e:
+            st.error(f"Error loading inspection model v2.0: {e}")
+            st.session_state.inspection_model_v20 = None
 
     with tabs[1]:
         st.header("Upload Image")
@@ -256,93 +320,103 @@ def main():
         uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
 
         if uploaded_file is not None:
-            # Preview uploaded image in compressed size
+            # Open the image and store it in the session state
             image = open_image(uploaded_file)
             if image is not None:
-                display_compressed_image(image)
+                st.session_state.image = image
+                # Display a compressed version of the image
+                st.write("Uploaded Image:")
+                display_compressed_image(image)  # Display smaller version
 
-                # Process and predict when an image is uploaded
-                try:
-                    if st.session_state.panel_detection_model is not None and st.session_state.inspection_model is not None:
-                        tensor = preprocess_image(image)
-                        # Store in session state
-                        st.session_state.image = image
-                        st.session_state.tensor = tensor
+                # Preprocess the image and store the tensor in the session state
+                st.session_state.image_tensor = preprocess_image(image)
 
-                        # Use the panel detection model to get the initial predictions
-                        st.session_state.predictions = predict(tensor, st.session_state.panel_detection_model, device)
+            # Predict using Panel Detection Model v2.0 immediately after upload
+            if st.session_state.panel_detection_model is not None:
+                panel_predictions = predict(st.session_state.image_tensor, st.session_state.panel_detection_model, device)
+                panel_detected_score = panel_predictions.get("Panel Detected", 0)
 
-                        # Check Panel Detected Score
-                        panel_detected_score = st.session_state.predictions.get("Panel Detected", 0)
-                        # Print label analysis to the terminal
-                        print_label_analysis(st.session_state.predictions)
+                if panel_detected_score < 50:
+                    st.error("No panel detected. Re-upload an image with a clear view of the solar panel.")
+                    # Clear other session states to prevent further execution
+                    for key in list(st.session_state.keys()):
+                        if key not in ['panel_detection_model', 'image']:
+                            del st.session_state[key]
+                    st.stop()  # Stop execution here
 
-                        if panel_detected_score < 50:
-                            st.error("No panel detected! Please re-upload.")
-                        else:
-                            # Recalculate predictions using the inspection model (v1.1)
-                            st.session_state.predictions = predict(tensor, st.session_state.inspection_model, device)
+                else:
+                    st.success("Image uploaded. Check the 'Total Score' and 'Label Analysis' tabs.")
+                    st.session_state.panel_predictions = panel_predictions # store in session state
 
-                            # Calculate inspection score and store in session state
-                            final_score, weighted_scores = compute_inspection_score(st.session_state.predictions)
-                            st.session_state.inspection_score = final_score
+            else:
+                st.error("Panel Detection model failed to load.")
 
-                            st.success("Inspection score generated! Check it out in the 'Total Score' tab.")
-                except Exception as e:
-                    st.error(f"An error occurred during prediction: {e}")
+    #Moved here
+    with tabs[3]:
+        st.header("Label Analysis")
+        if 'image_tensor' in st.session_state and \
+           st.session_state.inspection_model_v11 is not None and \
+           st.session_state.inspection_model_v20 is not None and \
+           'panel_predictions' in st.session_state:
+
+            # Get predictions from both models
+            predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
+            predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
+
+            # Combine predictions based on your logic
+            final_predictions = {}
+            for label in CLASS_CONFIG.keys():
+                if label == "Clean Panel":
+                    final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
+                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
+                    final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
+                elif label == "Panel Detected":
+                    final_predictions[label] = st.session_state.panel_predictions[label] # Use v2.0 prediction
+
+                else:
+                    # Handle other cases if needed, possibly raise an error
+                    st.error(f"Unexpected label: {label}")
+                    continue
+
+            st.session_state.inspection_predictions = final_predictions # store in session state
+            print_label_analysis(final_predictions)  # Print detailed analysis to the terminal
+            df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
+            st.dataframe(df)
+        else:
+            st.info("Upload an image in 'Upload Image' tab to see the label analysis.")
+
 
     with tabs[2]:
         st.header("Total Score")
+        if 'image_tensor' in st.session_state and \
+           st.session_state.inspection_model_v11 is not None and \
+           st.session_state.inspection_model_v20 is not None and \
+           'inspection_predictions' in st.session_state:
 
-        if 'inspection_score' in st.session_state and 'predictions' in st.session_state:
-            inspection_score = st.session_state.inspection_score
-
-            st.markdown(f"## Total Inspection Score: {inspection_score:.1f}/100")
-
-            # Add score classification with more granular thresholds
-            if inspection_score >= 85:
-                st.success("EXCELLENT CONDITION")
-            elif inspection_score >= 70:
-                st.success("GOOD CONDITION")
-            elif inspection_score >= 55:
-                st.warning("FAIR CONDITION")
-            elif inspection_score >= 35:
-                st.warning("POOR CONDITION")
-            else:
-                st.error("CRITICAL CONDITION")
-
-    with tabs[3]:
-        st.header("Label Analysis")
-
-        if 'predictions' in st.session_state:
-            predictions = st.session_state.predictions
-            st.write("Top 3 observations detected:")
-
-            # Sort predictions by score in descending order
-            sorted_predictions = sorted(predictions.items(), key=lambda item: item[1], reverse=True)
-
-            # Display the top 3 labels, excluding "Panel Detected"
-            count = 0
-            for label, score in sorted_predictions:
-                if label != "Panel Detected" and count < 3:
-                    st.write(f"- **{label}**: {score:.1f}%")
-                    count += 1
+            # Access stored predictions from Label Analysis
+            stored_predictions = {k: v for k, v in st.session_state.inspection_predictions.items() if k != "Panel Detected"}
+            inspection_score = compute_inspection_score(stored_predictions)
+            display_total_score(inspection_score)
         else:
-            st.write("No analysis available. Please upload an image first.")
+             st.warning("No Label Analysis found. Please analyze the image in the 'Label Analysis' tab first.")
 
     with tabs[4]:
         st.header("Outcome")
+        if 'image_tensor' in st.session_state and \
+           st.session_state.inspection_model_v11 is not None and \
+           st.session_state.inspection_model_v20 is not None and \
+           'inspection_predictions' in st.session_state:
 
-        if 'predictions' in st.session_state:
-            predictions = st.session_state.predictions
+            # Access stored predictions from Label Analysis (or recalculate if needed)
+            predictions = st.session_state.inspection_predictions
 
-            st.subheader("Cleaning Suggestions:")
+            # Display cleaning suggestions based on the predictions
             suggestions = cleaning_suggestions(predictions)
+            st.subheader("Cleaning Suggestions:")
             for suggestion in suggestions:
                 st.markdown(f"- {suggestion}")
-
         else:
-            st.write("No outcome available. Please upload an image first.")
+            st.info("Upload an image in 'Upload Image' tab to see the outcome.")
 
 if __name__ == "__main__":
     main()
