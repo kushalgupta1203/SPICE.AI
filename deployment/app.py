@@ -288,23 +288,42 @@ def main():
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Title and Current Date/Time Display
+    # Use a CSS media query approach for responsive images
+    st.markdown("""
+        <style>
+        .desktop-logo {
+            display: block;
+        }
+        .mobile-logo {
+            display: none;
+        }
+        
+        /* Media query for mobile devices */
+        @media (max-width: 768px) {
+            .desktop-logo {
+                display: none;
+            }
+            .mobile-logo {
+                display: block;
+            }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Display both logos with appropriate CSS classes
     try:
-        # Use requests to fetch the image from the URL
-        response = requests.get("https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo.png?raw=true", stream=True)
-        response.raise_for_status()  # Raise an exception for bad status codes
-
-        # Open the image using PIL
-        logo = Image.open(BytesIO(response.content))
-        st.image(logo, use_container_width=True)  # Updated to use_container_width
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching logo: {e}")
-        st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
-        st.warning("Logo not found.  Using default title.")
+        st.markdown("""
+            <div class="desktop-logo">
+                <img src="https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true" style="width: 100%;">
+            </div>
+            <div class="mobile-logo">
+                <img src="https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true" style="width: 100%;">
+            </div>
+        """, unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Error opening logo: {e}")
+        st.error(f"Error with logo display: {e}")
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
-        st.warning("Logo not found.  Using default title.")
+        st.warning("Logo not found. Using default title.")
 
     # Tabs for Different Sections
     tabs = st.tabs(["How to Use", "Upload Image", "Total Score", "Label Analysis", "Outcome"])
