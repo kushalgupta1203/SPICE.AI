@@ -262,7 +262,7 @@ def main():
     
     # Title and Current Date/Time Display
     try:
-        logo = Image.open("D:\\Projects\\SPICE.AI\\deployment\\logo.png")
+        logo = Image.open("https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo.png?raw=true")
         st.image(logo, use_container_width=True)  # Updated to use_container_width
     except FileNotFoundError:
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
@@ -310,7 +310,6 @@ def main():
                     st.session_state.image = image
                     st.session_state.tensor = tensor
                     st.session_state.predictions = predict(tensor, st.session_state.model, device)
-
                     # Check Panel Detected Score
                     panel_detected_score = st.session_state.predictions.get("Panel Detected", 0)
                     if panel_detected_score < 10:
@@ -361,36 +360,43 @@ def main():
                             key=lambda x: x[1], reverse=True)
 
             if issues:
-                st.subheader("Detected Issues:")
+                st.write("Identified Issues:")
                 for label, score in issues:
-                    # Assign emojis based on the score
-                    if score > 70:
-                        emoji = "🔴"  # Red
-                    elif score > 40:
-                        emoji = "🟠"  # Orange
-                    else:
-                        emoji = "🟡"  # Yellow
-                    st.write(f"{label}: {score:.1f}% {emoji}")
+                    st.write(f"- {label}: {score:.1f}%")
             else:
-                st.write("No significant issues detected.")
+                st.info("No significant issues detected based on the confidence scores.")
         else:
-            st.write("Upload an image to view label analysis.")
-            
+            st.write("Upload an image to see the label analysis.")
+    
     with tabs[4]:
         st.header("Outcome")
-        
-        if 'inspection_score' in st.session_state and 'predictions' in st.session_state:
-            inspection_score = st.session_state["inspection_score"]
-            predictions = st.session_state["predictions"]
-            
-            # Cleaning Suggestions
-            st.subheader("Cleaning Suggestions:")
-            suggested_actions = cleaning_suggestions(predictions)
-            for suggestion in suggested_actions:
-                st.markdown(f"- {suggestion}")
-            
-        else:
-            st.write("Upload an image to view outcome.")
 
+        if 'predictions' in st.session_state and 'inspection_score' in st.session_state:
+            predictions = st.session_state.predictions
+            inspection_score = st.session_state.inspection_score
+
+            # Display cleaning suggestions
+            st.subheader("Cleaning Suggestions")
+            suggestions = cleaning_suggestions(predictions)
+            for suggestion in suggestions:
+                st.write(f"- {suggestion}")
+
+            # Calculate and display efficiency impact
+            st.subheader("Efficiency Impact")
+            efficiency_results = calculate_efficiency_impact(inspection_score, predictions)
+            st.write(f"Total Efficiency Impact: {efficiency_results['total_impact']}%")
+            st.write(f"Estimated Actual Efficiency: {efficiency_results['actual_efficiency']}%")
+            st.write(f"Base Impact (from overall score): {efficiency_results['base_impact']}%")
+            st.write(f"Additional Impact (from specific issues): {efficiency_results['additional_impact']}%")
+
+            # Display efficiency impact breakdown
+            st.write("Efficiency Impact Breakdown:")
+            breakdown = efficiency_results['breakdown']
+            for issue, impact in breakdown.items():
+                st.write(f"- {issue.replace('_', ' ').title()}: {impact}%")
+        else:
+            st.write("Upload an image and run the analysis to see the outcome.")
+
+# Run the main function
 if __name__ == "__main__":
     main()
