@@ -10,8 +10,16 @@ import requests
 import pandas as pd
 
 # Load Model Function
-def load_model(model_path, device, num_classes=8):
+def load_model(model_url, device, num_classes=8):
     try:
+        # Download the model file from URL
+        response = requests.get(model_url)
+        response.raise_for_status()  # Raise an exception for bad responses
+        
+        # Load model from the downloaded content
+        model_bytes = BytesIO(response.content)
+        
+        # Create model architecture
         model = models.mobilenet_v3_large(weights=None)
         num_ftrs = model.classifier[0].in_features
 
@@ -23,14 +31,14 @@ def load_model(model_path, device, num_classes=8):
             nn.Linear(1280, num_classes)  # Match final output dimensions
         )
 
-        # Load state dict with strict=False to allow partial loading
-        state_dict = torch.load(model_path, map_location=device)
+        # Load state dict from bytes with strict=False to allow partial loading
+        state_dict = torch.load(model_bytes, map_location=device)
         model.load_state_dict(state_dict, strict=False)
 
         model.to(device)
         model.eval()
         return model
-    except RuntimeError as e:
+    except Exception as e:
         st.error(f"Error loading model: {e}")
         raise
 
@@ -50,7 +58,6 @@ def open_image(uploaded_file):
     except Exception as e:
         st.error(f"Error opening image: {e}")
         return None
-
 
 # Function to display a smaller version of the image
 def display_compressed_image(image, max_width=400):
@@ -287,38 +294,36 @@ def main():
             """)
 
     # Store model, image, tensor, and predictions in session state
-    if 'panel_detection_model' not in st.session_state:
-        try:
-            panel_model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v2.0.pth"
-            # Load the panel detection model (v2.0) with 8 classes, as it predicts "Panel Detected" along with others
-            st.session_state.panel_detection_model = load_model(panel_model_path, device, num_classes=8)
-        except Exception as e:
-            st.error(f"Error loading panel detection model: {e}")
-            st.session_state.panel_detection_model = None
+        if 'panel_detection_model' not in st.session_state:
+            try:
+                panel_model_url = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v2.0.pth"
+                # Load the panel detection model (v2.0) with 8 classes
+                st.session_state.panel_detection_model = load_model(panel_model_url, device, num_classes=8)
+            except Exception as e:
+                st.error(f"Error loading panel detection model: {e}")
+                st.session_state.panel_detection_model = None
 
-    if 'inspection_model_v11' not in st.session_state:
-        try:
-            inspection_model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v1.1.pth"
-            # Load the inspection model (v1.1) also with 8 classes
-            st.session_state.inspection_model_v11 = load_model(inspection_model_path, device, num_classes=8)
-        except Exception as e:
-            st.error(f"Error loading inspection model v1.1: {e}")
-            st.session_state.inspection_model_v11 = None
+        if 'inspection_model_v11' not in st.session_state:
+            try:
+                inspection_model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v1.1.pth"
+                # Load the inspection model (v1.1)
+                st.session_state.inspection_model_v11 = load_model(inspection_model_url_v11, device, num_classes=8)
+            except Exception as e:
+                st.error(f"Error loading inspection model v1.1: {e}")
+                st.session_state.inspection_model_v11 = None
 
-    if 'inspection_model_v20' not in st.session_state:
-        try:
-            inspection_model_path = r"D:\Projects\SPICE.AI\models\spice_ai_mobilenetv3_v2.0.pth"
-            # Load the inspection model (v2.0)
-            st.session_state.inspection_model_v20 = load_model(inspection_model_path, device, num_classes=8)
-        except Exception as e:
-            st.error(f"Error loading inspection model v2.0: {e}")
-            st.session_state.inspection_model_v20 = None
-
-    with tabs[1]:
-        st.header("Upload Image")
+        if 'inspection_model_v20' not in st.session_state:
+            try:
+                inspection_model_url_v20 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v2.0.pth"
+                # Load the inspection model (v2.0)
+                st.session_state.inspection_model_v20 = load_model(inspection_model_url_v20, device, num_classes=8)
+            except Exception as e:
+                st.error(f"Error loading inspection model v2.0: {e}")
+                st.session_state.inspection_model_v20 = None
+            with tabs[1]:
+                st.header("Upload Image")
 
         uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
-
         if uploaded_file is not None:
             # Open the image and store it in the session state
             image = open_image(uploaded_file)
@@ -356,67 +361,52 @@ def main():
         st.header("Label Analysis")
         if 'image_tensor' in st.session_state and \
            st.session_state.inspection_model_v11 is not None and \
-           st.session_state.inspection_model_v20 is not None and \
-           'panel_predictions' in st.session_state:
+           st.session_state.inspection_model_v20 is not None:
 
-            # Get predictions from both models
+            st.subheader("Label Predictions - Model v1.1")
             predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
+            print_label_analysis(predictions_v11)
+            for label, score in predictions_v11.items():
+                st.text(f"{label}: {score:.1f}%")
+
+            st.subheader("Label Predictions - Model v2.0")
             predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
+            print_label_analysis(predictions_v20)
+            for label, score in predictions_v20.items():
+                st.text(f"{label}: {score:.1f}%")
 
-            # Combine predictions based on your logic
-            final_predictions = {}
-            for label in CLASS_CONFIG.keys():
-                if label == "Clean Panel":
-                    final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
-                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
-                    final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
-                elif label == "Panel Detected":
-                    final_predictions[label] = st.session_state.panel_predictions[label] # Use v2.0 prediction
-
-                else:
-                    # Handle other cases if needed, possibly raise an error
-                    st.error(f"Unexpected label: {label}")
-                    continue
-
-            st.session_state.inspection_predictions = final_predictions # store in session state
-            print_label_analysis(final_predictions)  # Print detailed analysis to the terminal
-            df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
-            st.dataframe(df)
+            st.session_state.predictions_v11 = predictions_v11
+            st.session_state.predictions_v20 = predictions_v20
         else:
-            st.info("Upload an image in 'Upload Image' tab to see the label analysis.")
-
+            st.warning("Upload an image and ensure models are loaded to see label analysis.")
 
     with tabs[2]:
         st.header("Total Score")
-        if 'image_tensor' in st.session_state and \
-           st.session_state.inspection_model_v11 is not None and \
-           st.session_state.inspection_model_v20 is not None and \
-           'inspection_predictions' in st.session_state:
+        if 'predictions_v11' in st.session_state and 'predictions_v20' in st.session_state:
+            st.subheader("Inspection Score - Model v1.1")
+            inspection_score_v11 = compute_inspection_score(st.session_state.predictions_v11)
+            display_total_score(inspection_score_v11)
 
-            # Access stored predictions from Label Analysis
-            stored_predictions = {k: v for k, v in st.session_state.inspection_predictions.items() if k != "Panel Detected"}
-            inspection_score = compute_inspection_score(stored_predictions)
-            display_total_score(inspection_score)
+            st.subheader("Inspection Score - Model v2.0")
+            inspection_score_v20 = compute_inspection_score(st.session_state.predictions_v20)
+            display_total_score(inspection_score_v20)
         else:
-             st.warning("No Label Analysis found. Please analyze the image in the 'Label Analysis' tab first.")
+            st.warning("Label analysis needs to be done first.")
 
     with tabs[4]:
         st.header("Outcome")
-        if 'image_tensor' in st.session_state and \
-           st.session_state.inspection_model_v11 is not None and \
-           st.session_state.inspection_model_v20 is not None and \
-           'inspection_predictions' in st.session_state:
+        if 'predictions_v11' in st.session_state and 'predictions_v20' in st.session_state:
+            st.subheader("Cleaning Suggestions - Model v1.1")
+            suggestions_v11 = cleaning_suggestions(st.session_state.predictions_v11)
+            for suggestion in suggestions_v11:
+                st.markdown(f"- {suggestion}")
 
-            # Access stored predictions from Label Analysis (or recalculate if needed)
-            predictions = st.session_state.inspection_predictions
-
-            # Display cleaning suggestions based on the predictions
-            suggestions = cleaning_suggestions(predictions)
-            st.subheader("Cleaning Suggestions:")
-            for suggestion in suggestions:
+            st.subheader("Cleaning Suggestions - Model v2.0")
+            suggestions_v20 = cleaning_suggestions(st.session_state.predictions_v20)
+            for suggestion in suggestions_v20:
                 st.markdown(f"- {suggestion}")
         else:
-            st.info("Upload an image in 'Upload Image' tab to see the outcome.")
+            st.warning("Generate total score first to see outcome.")
 
 if __name__ == "__main__":
     main()
