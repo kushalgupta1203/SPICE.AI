@@ -207,25 +207,25 @@ def cleaning_suggestions(predictions):
     # Foreign Particle Contamination (Dust, Dirt, etc.)
     contamination = predictions.get("Foreign Particle Contamination", 0)
     if contamination > 90:
-        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+        suggestions.append("🔴 Heavy foreign particle accumulation. Clean the panel soon.")
     elif contamination > 80:
-        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+        suggestions.append("🔴 Heavy foreign particle accumulation. Clean the panel soon.")
     elif contamination > 70:
-        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+        suggestions.append("🔴 Heavy foreign particle accumulation. Clean the panel soon.")
     elif contamination > 60:
-        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+        suggestions.append("🔴 Heavy foreign particle accumulation. Clean the panel soon.")
     elif contamination > 50:
-        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+        suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 40:
-        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+        suggestions.append("🟠 Moderate foreign particlet accumulation detected. Cleaning recommended.")
     elif contamination > 30:
-        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+        suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 20:
-        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+        suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 10:
-        suggestions.append("🟢 Light contamination present. Preventive cleaning advised.")
+        suggestions.append("🟢 Light foreign particle contamination present. Preventive cleaning advised.")
     elif contamination > 5:
-        suggestions.append("🟢 Light contamination present. Preventive cleaning advised.")
+        suggestions.append("🟢 Light foreign particle contamination present. Preventive cleaning advised.")
 
     # Bird Droppings/Interference
     birds = predictions.get("Bird Interference", 0)
@@ -234,15 +234,15 @@ def cleaning_suggestions(predictions):
     elif birds > 80:
         suggestions.append("🔴 Severe bird interference! Install deterrents immediately.")
     elif birds > 70:
-        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+        suggestions.append("🟠 Moderate bird interference. Deterrents may be needed.")
     elif birds > 60:
-        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+        suggestions.append("🟠 Moderate bird interference. Deterrents may be needed.")
     elif birds > 50:
-        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+        suggestions.append("🟠 Moderate bird interference. Deterrents may be needed.")
     elif birds > 40:
-        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+        suggestions.append("🟠 Moderate bird interference. Deterrents may be needed.")
     elif birds > 30:
-        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+        suggestions.append("🟠 Moderate bird interference. Deterrents may be needed.")
     elif birds > 20:
         suggestions.append("🟡 Light bird activity. Monitor and take action if needed.")
     elif birds > 10:
@@ -568,9 +568,9 @@ def main():
         final_predictions = {}
         for label in CLASS_CONFIG.keys():
             if label == "Clean Panel":
-                final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
+                final_predictions[label] = (predictions_v11[label] + predictions_v20[label]) / 2
             elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
-                final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
+                final_predictions[label] = (predictions_v11[label] + predictions_v20[label]) / 2
             elif label == "Panel Detected":
                 final_predictions[label] = predictions_v20[label]
             else:
