@@ -1,5 +1,0 @@
-- training
-- testing
-- manual testing
-- application
-- deployment

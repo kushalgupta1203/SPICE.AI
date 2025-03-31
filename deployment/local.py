@@ -83,17 +83,17 @@ def display_total_score(total_score):
     if total_score >= 90:
         st.success("EXCELLENT CONDITION")
     elif total_score >= 80:
-        st.success("VERY GOOD CONDITION")
-    elif total_score >= 70:
         st.success("GOOD CONDITION")
+    elif total_score >= 70:
+        st.warning("AVERAGE CONDITION")
     elif total_score >= 60:
-        st.warning("ABOVE AVERAGE CONDITION")
-    elif total_score >= 50:
-        st.warning("FAIR CONDITION")
-    elif total_score >= 40:
         st.warning("POOR CONDITION")
+    elif total_score >= 50:
+        st.error("POOR CONDITION")
+    elif total_score >= 40:
+        st.error("CRITICAL CONDITION")
     elif total_score >= 30:
-        st.error("VERY POOR CONDITION")
+        st.error("CRITICAL CONDITION")
     else:
         st.error("CRITICAL CONDITION")
 
