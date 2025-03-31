@@ -578,7 +578,7 @@ def main():
                 continue
 
         st.session_state.inspection_predictions = final_predictions
-        st.header("Inspection Analysis")
+        st.header("Inspection Analysis:")
         print_label_analysis(final_predictions)
 
         df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
@@ -605,7 +605,7 @@ def main():
         display_total_score(total_score)
 
         # Cleaning Suggestions Section
-        st.header("Suggestions")
+        st.header("Suggestions:")
         predictions = st.session_state.inspection_predictions
         suggestions = cleaning_suggestions(predictions)
 
