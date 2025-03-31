@@ -280,7 +280,7 @@ def main():
         st.warning("Logo not found. Using default title.")
 
     # Tabs for Different Sections
-    tabs = st.tabs(["How to Use", "Upload Image", "Total Score", "Label Analysis", "Outcome"])
+    tabs = st.tabs(["How to Use", "Upload Image", "Label Analysis", "Total Score",  "Outcome"])
 
     with tabs[0]:
         st.header("User Guide")
@@ -357,7 +357,7 @@ def main():
                 st.error("Panel Detection model failed to load.")
 
     #Moved here
-    with tabs[3]:
+    with tabs[2]:
         st.header("Label Analysis")
         if 'image_tensor' in st.session_state and \
            st.session_state.inspection_model_v11 is not None and \
@@ -380,7 +380,7 @@ def main():
         else:
             st.warning("Upload an image and ensure models are loaded to see label analysis.")
 
-    with tabs[2]:
+    with tabs[3]:
         st.header("Total Score")
         if 'predictions_v11' in st.session_state and 'predictions_v20' in st.session_state:
             st.subheader("Inspection Score - Model v1.1")

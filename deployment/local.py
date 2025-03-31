@@ -223,7 +223,7 @@ CLASS_CONFIG = {
 
 # Function to print label analysis to the terminal
 def print_label_analysis(predictions):
-    print("--- Label Analysis ---")
+    print("--- Panel Analysis ---")
     for label, score in predictions.items():
         print(f"{label}: {score:.1f}%")
     print("----------------------")
@@ -273,7 +273,7 @@ def main():
         st.warning("Logo not found. Using default title.")
 
     # Tabs for Different Sections
-    tabs = st.tabs(["How to Use", "Upload Image", "Total Score", "Label Analysis", "Outcome"])
+    tabs = st.tabs(["How to Use", "Upload Image", "Panel Analysis", "Total Score", "Outcome"])
 
     with tabs[0]:
         st.header("User Guide")
@@ -283,7 +283,7 @@ def main():
             - **Upload an Image**: Go to the 'Upload Image' tab and upload a clear image of your solar panel.
             - **Preview**: After uploading the image successfully you will see a preview of it.
             - **Analysis**: The system will evaluate cleanliness and detect potential issues such as physical damage or obstructions.
-            - **Scores**: The system provides an overall inspection score along with detailed label analysis.
+            - **Scores**: The system provides an overall inspection score along with detailed panel analysis.
             """)
 
     # Store model, image, tensor, and predictions in session state
@@ -345,15 +345,15 @@ def main():
                     st.stop()  # Stop execution here
 
                 else:
-                    st.success("Image uploaded. Check the 'Total Score' and 'Label Analysis' tabs.")
+                    st.success("Image uploaded. Check the 'Total Score' and 'Panel Analysis' tabs.")
                     st.session_state.panel_predictions = panel_predictions # store in session state
 
             else:
                 st.error("Panel Detection model failed to load.")
 
     #Moved here
-    with tabs[3]:
-        st.header("Label Analysis")
+    with tabs[2]:
+        st.header("Panel Analysis")
         if 'image_tensor' in st.session_state and \
            st.session_state.inspection_model_v11 is not None and \
            st.session_state.inspection_model_v20 is not None and \
@@ -367,7 +367,7 @@ def main():
             final_predictions = {}
             for label in CLASS_CONFIG.keys():
                 if label == "Clean Panel":
-                    final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
+                    final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
                 elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
                     final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
                 elif label == "Panel Detected":
@@ -378,15 +378,27 @@ def main():
                     st.error(f"Unexpected label: {label}")
                     continue
 
-            st.session_state.inspection_predictions = final_predictions # store in session state
+            st.session_state.inspection_predictions = final_predictions  # store in session state
             print_label_analysis(final_predictions)  # Print detailed analysis to the terminal
+
+            # Convert scores to string and append '%' symbol
             df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
+            df['Score'] = df['Score'].astype(str) + '%'
+
+            st.markdown("""
+                <style>
+                    div[data-testid="stDataFrame"] td {
+                        text-align: center !important;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
+
             st.dataframe(df)
         else:
-            st.info("Upload an image in 'Upload Image' tab to see the label analysis.")
+            st.info("Upload an image in 'Upload Image' tab to see the panel analysis.")
 
 
-    with tabs[2]:
+    with tabs[3]:
         st.header("Total Score")
         if 'image_tensor' in st.session_state and \
            st.session_state.inspection_model_v11 is not None and \
@@ -398,7 +410,7 @@ def main():
             inspection_score = compute_inspection_score(stored_predictions)
             display_total_score(inspection_score)
         else:
-             st.warning("No Label Analysis found. Please analyze the image in the 'Label Analysis' tab first.")
+             st.warning("No Panel Analysis found. Please analyze the image in the 'Panel Analysis' tab first.")
 
     with tabs[4]:
         st.header("Outcome")
