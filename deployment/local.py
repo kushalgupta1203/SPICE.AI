@@ -77,7 +77,7 @@ def print_label_analysis(predictions):
     print("----------------------")
 
 def display_total_score(total_score):
-    st.markdown(f"## {total_score:.1f}/100")  # Force 1 decimal
+    st.markdown(f"## Total Score: {total_score:.1f}/100")  # Force 1 decimal
 
     # Add score classification with more granular thresholds
     if total_score >= 90:
@@ -445,9 +445,8 @@ SCORE_RATIOS = {
 
 
 
-# Main Function for Streamlit App
 def main():
-    st.set_page_config(page_title="SPICE.AI: Solar Panel Inspection", layout="wide")
+    st.set_page_config(page_title="SPICE.AI", layout="wide")
 
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -489,19 +488,9 @@ def main():
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
         st.warning("Logo not found. Using default title.")
 
-    # Tabs for Different Sections
-    tabs = st.tabs(["How to Use", "Upload Image", "Panel Analysis", "Total Score", "Suggestion"])
+    # Add a visual separator
+    st.markdown("---")
 
-    with tabs[0]:
-        st.header("User Guide")
-
-        st.markdown("""
-            Follow these steps to analyze your solar panel image:
-            - **Upload an Image**: Go to the 'Upload Image' tab and upload a clear image of your solar panel.
-            - **Preview**: After uploading the image successfully you will see a preview of it.
-            - **Analysis**: The system will evaluate cleanliness and detect potential issues such as physical damage or obstructions.
-            - **Scores**: The system provides an overall inspection score along with detailed panel analysis.
-            """)
 
     # Store model, image, tensor, and predictions in session state
     if 'panel_detection_model' not in st.session_state:
@@ -531,159 +520,102 @@ def main():
             st.error(f"Error loading inspection model v2.0: {e}")
             st.session_state.inspection_model_v20 = None
 
-    with tabs[1]:
-        st.header("Upload Image")
+    uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
 
-        uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
+    if uploaded_file is not None:
+        # Open the image and store it in the session state
+        image = open_image(uploaded_file)
+        if image is not None:
+            st.session_state.image = image
+            st.write("Uploaded Image:")
+            display_compressed_image(image)  # Display smaller version
 
-        if uploaded_file is not None:
-            # Open the image and store it in the session state
-            image = open_image(uploaded_file)
-            if image is not None:
-                st.session_state.image = image
-                # Display a compressed version of the image
-                st.write("Uploaded Image:")
-                display_compressed_image(image)  # Display smaller version
+            # Preprocess the image and store the tensor in the session state
+            st.session_state.image_tensor = preprocess_image(image)
 
-                # Preprocess the image and store the tensor in the session state
-                st.session_state.image_tensor = preprocess_image(image)
+        # Predict using Panel Detection Model v2.0 immediately after upload
+        if st.session_state.panel_detection_model is not None:
+            panel_predictions = predict(st.session_state.image_tensor, st.session_state.panel_detection_model, device)
+            panel_detected_score = panel_predictions.get("Panel Detected", 0)
 
-            # Predict using Panel Detection Model v2.0 immediately after upload
-            if st.session_state.panel_detection_model is not None:
-                panel_predictions = predict(st.session_state.image_tensor, st.session_state.panel_detection_model, device)
-                panel_detected_score = panel_predictions.get("Panel Detected", 0)
-
-                if panel_detected_score < 50:
-                    st.error("No panel detected. Re-upload an image with a clear view of the solar panel.")
-                    # Clear other session states to prevent further execution
-                    for key in list(st.session_state.keys()):
-                        if key not in ['panel_detection_model', 'image']:
-                            del st.session_state[key]
-                    st.stop()  # Stop execution here
-
-                else:
-                    st.success("Image uploaded. Check the 'Panel Analysis' and 'Total Score' tabs.")
-                    st.session_state.panel_predictions = panel_predictions # store in session state
-
+            if panel_detected_score < 50:
+                st.error("No panel detected. Re-upload an image with a clear view of the solar panel.")
+                for key in list(st.session_state.keys()):
+                    if key not in ['panel_detection_model', 'image']:
+                        del st.session_state[key]
+                st.stop()
             else:
-                st.error("Panel Detection model failed to load.")
-
-    #Moved here
-    with tabs[2]:
-        st.header("Panel Analysis")
-        if 'image_tensor' in st.session_state and \
-           st.session_state.inspection_model_v11 is not None and \
-           st.session_state.inspection_model_v20 is not None and \
-           'panel_predictions' in st.session_state:
-
-            # Get predictions from both models
-            predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
-            predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
-
-            # Combine predictions based on your logic
-            final_predictions = {}
-            for label in CLASS_CONFIG.keys():
-                if label == "Clean Panel":
-                    final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
-                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
-                    final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
-                elif label == "Panel Detected":
-                    final_predictions[label] = predictions_v20[label] # Use v2.0 prediction
-
-                else:
-                    # Handle other cases if needed, possibly raise an error
-                    st.error(f"Unexpected label: {label}")
-                    continue
-
-            st.session_state.inspection_predictions = final_predictions  # store in session state
-            print_label_analysis(final_predictions)  # Print detailed analysis to the terminal
-
-            # Convert scores to string and append '%' symbol
-            df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
-            df['Score'] = df['Score'].astype(str) + '%'
-
-            st.markdown("""
-                <style>
-                    div[data-testid="stDataFrame"] td {
-                        text-align: center !important;
-                    }
-                </style>
-            """, unsafe_allow_html=True)
-
-            st.dataframe(df)
+                st.success("Image uploaded.")
+                st.session_state.panel_predictions = panel_predictions
+                st.session_state.image_uploaded = True
         else:
-            st.info("Upload an image in 'Upload Image' tab to see the panel analysis.")
+            st.error("Inspection model failed to load.")
 
-    with tabs[3]:
-        st.header("Total Score")
-        if 'image_tensor' in st.session_state and \
-        st.session_state.inspection_model_v11 is not None and \
-        st.session_state.inspection_model_v20 is not None and \
-        'panel_predictions' in st.session_state:
+    # Inspection Analysis Section
+    if 'image_tensor' in st.session_state and \
+    st.session_state.inspection_model_v11 is not None and \
+    st.session_state.inspection_model_v20 is not None and \
+    'panel_predictions' in st.session_state:
 
-            # Get predictions from both models
-            predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
-            predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
+        # Add a visual separator
+        st.markdown("---")
 
-            # Combine predictions
-            final_predictions = {}
-            for label in SCORE_RATIOS.keys():
-                if label == "Clean Panel":
-                    final_predictions[label] = float(min(predictions_v11[label], predictions_v20[label]))
-                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
-                    final_predictions[label] = float(min(predictions_v11[label], predictions_v20[label]))
-                elif label == "Panel Detected":
-                    final_predictions[label] = float(predictions_v20[label])  # Use v2.0 prediction
-                else:
-                    st.error(f"Unexpected label: {label}")
-                    continue
+        predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
+        predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
 
-            # Calculate Total Score
-            total_score = 0.0
-            for label, value in final_predictions.items():
-                if label in SCORE_RATIOS:
-                    for (low, high, ratio) in SCORE_RATIOS[label]["ranges"]:
-                        if low <= value < high:
-                            total_score += value * ratio
-                            break  # Exit loop once correct range is found
+        final_predictions = {}
+        for label in CLASS_CONFIG.keys():
+            if label == "Clean Panel":
+                final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
+            elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
+                final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
+            elif label == "Panel Detected":
+                final_predictions[label] = predictions_v20[label]
+            else:
+                st.error(f"Unexpected label: {label}")
+                continue
 
-            display_total_score(total_score)
+        st.session_state.inspection_predictions = final_predictions
+        st.header("Inspection Analysis")
+        print_label_analysis(final_predictions)
 
-        else:
-            st.info("Run Panel Analysis first to calculate the Total Score.")
+        df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
+        df['Score'] = df['Score'].apply(lambda x: f"{x:.2f}%")
+
+        st.markdown("""
+            <style>
+                div[data-testid="stDataFrame"] td {
+                    text-align: center !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.dataframe(df)
+
+        total_score = 0.0
+        for label, value in final_predictions.items():
+            if label in SCORE_RATIOS:
+                for (low, high, ratio) in SCORE_RATIOS[label]["ranges"]:
+                    if low <= value < high:
+                        total_score += value * ratio
+                        break
+
+        display_total_score(total_score)
+
+        # Cleaning Suggestions Section
+        st.header("Suggestions")
+        predictions = st.session_state.inspection_predictions
+        suggestions = cleaning_suggestions(predictions)
+
+        severity_order = {"🔴": 1, "🟠": 2, "🟡": 3, "🟢": 4}
+        sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s[:1], 5))
+
+        for suggestion in sorted_suggestions:
+            st.markdown(f"- {suggestion}")
+    else:
+        st.info("Upload an image to see the inspection report of your solar panel.")
 
 
-
-    with tabs[4]:
-        st.header("Suggestion")
-        if 'image_tensor' in st.session_state and \
-        st.session_state.inspection_model_v11 is not None and \
-        st.session_state.inspection_model_v20 is not None and \
-        'inspection_predictions' in st.session_state:
-
-            # Access stored predictions from Label Analysis (or recalculate if needed)
-            predictions = st.session_state.inspection_predictions
-
-            # Get cleaning suggestions
-            suggestions = cleaning_suggestions(predictions)
-
-            # Sort suggestions based on severity (keeping original order for same severity)
-            severity_order = {
-                "🔴": 1,  # Highest severity
-                "🟠": 2,
-                "🟡": 3,
-                "🟢": 4  # Lowest severity
-            }
-            
-            # Sort suggestions based on severity marker
-            sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s[:1], 5))
-
-            # Display sorted suggestions
-            for suggestion in sorted_suggestions:
-                st.markdown(f"- {suggestion}")
-
-        else:
-            st.info("Upload an image in 'Upload Image' tab to see the suggestions.")
 
 if __name__ == "__main__":
     main()

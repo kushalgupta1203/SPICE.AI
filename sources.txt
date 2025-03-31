@@ -5,4 +5,3 @@ https://universe.roboflow.com/hasan-aybyk/yedek-1/dataset/1
 https://universe.roboflow.com/solar-panel-detection-bgiuk/solar-panel-detection-a5bec
 https://universe.roboflow.com/safa-jl78c/clean-dirty-solarpanel
 https://www.kaggle.com/datasets/pavansanagapati/images-dataset
-
