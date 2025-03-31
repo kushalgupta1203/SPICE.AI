@@ -10,29 +10,37 @@ import requests
 import pandas as pd
 
 # Load Model Function
-def load_model(model_path, device, num_classes=8):
-    try:
-        model = models.mobilenet_v3_large(weights=None)
-        num_ftrs = model.classifier[0].in_features
-
-        # Adjust classifier to match checkpoint dimensions
-        model.classifier = nn.Sequential(
-            nn.Linear(num_ftrs, 1280),  # Match checkpoint dimensions
-            nn.Hardswish(),
-            nn.Dropout(0.2),
-            nn.Linear(1280, num_classes)  # Match final output dimensions
-        )
-
-        # Load state dict with strict=False to allow partial loading
-        state_dict = torch.load(model_path, map_location=device)
-        model.load_state_dict(state_dict, strict=False)
-
-        model.to(device)
-        model.eval()
-        return model
-    except RuntimeError as e:
-        st.error(f"Error loading model: {e}")
-        raise
+def load_model(model_url, device, num_classes=8):
+     try:
+         # Download the model file from URL
+         response = requests.get(model_url)
+         response.raise_for_status()  # Raise an exception for bad responses
+ 
+         # Load model from the downloaded content
+         model_bytes = BytesIO(response.content)
+ 
+         # Create model architecture
+         model = models.mobilenet_v3_large(weights=None)
+         num_ftrs = model.classifier[0].in_features
+ 
+         # Adjust classifier to match checkpoint dimensions
+         model.classifier = nn.Sequential(
+             nn.Linear(num_ftrs, 1280),  # Match checkpoint dimensions
+             nn.Hardswish(),
+             nn.Dropout(0.2),
+             nn.Linear(1280, num_classes)  # Match final output dimensions
+         )
+ 
+         # Load state dict from bytes with strict=False to allow partial loading
+         state_dict = torch.load(model_bytes, map_location=device)
+         model.load_state_dict(state_dict, strict=False)
+ 
+         model.to(device)
+         model.eval()
+         return model
+     except Exception as e:
+         st.error(f"Error loading model: {e}")
+         raise
 
 # Image Preprocessing Function
 def preprocess_image(image):
@@ -484,10 +492,9 @@ def main():
             </div>
         """, unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Error with logo display: {e}")
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
-        st.warning("Logo not found. Using default title.")
-    
+
+    # Store model, image, tensor, and predictions in session state 
     if 'panel_detection_model' not in st.session_state:
         try:
             panel_model_url = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v2.0.pth"
