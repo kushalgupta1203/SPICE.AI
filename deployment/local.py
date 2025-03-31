@@ -345,7 +345,7 @@ def main():
                     st.stop()  # Stop execution here
 
                 else:
-                    st.success("Image uploaded. Check the 'Total Score' and 'Panel Analysis' tabs.")
+                    st.success("Image uploaded. Check the 'Panel Analysis' and 'Total Score' tabs.")
                     st.session_state.panel_predictions = panel_predictions # store in session state
 
             else:
