@@ -59,6 +59,7 @@ def open_image(uploaded_file):
         st.error(f"Error opening image: {e}")
         return None
 
+
 # Function to display a smaller version of the image
 def display_compressed_image(image, max_width=400):
     width, height = image.size
@@ -76,23 +77,30 @@ def predict(image_tensor, model, device):
     scores = [round(100 * (1 / (1 + np.exp(-x))), 1) for x in outputs]  # Changed to 1 decimal
     return {label: score for label, score in zip(CLASS_CONFIG.keys(), scores)}
 
-def display_total_score(inspection_score):
-    st.markdown(f"## Total Inspection Score: {inspection_score:.1f}/100")  # Force 1 decimal
+# Function to print label analysis to the terminal
+def print_label_analysis(predictions):
+    print("--- Panel Analysis ---")
+    for label, score in predictions.items():
+        print(f"{label}: {score:.1f}%")
+    print("----------------------")
+
+def display_total_score(total_score):
+    st.markdown(f"## {total_score:.1f}/100")
 
     # Add score classification with more granular thresholds
-    if inspection_score >= 90:
+    if total_score >= 90:
         st.success("EXCELLENT CONDITION")
-    elif inspection_score >= 80:
+    elif total_score >= 80:
         st.success("VERY GOOD CONDITION")
-    elif inspection_score >= 70:
+    elif total_score >= 70:
         st.success("GOOD CONDITION")
-    elif inspection_score >= 60:
+    elif total_score >= 60:
         st.warning("ABOVE AVERAGE CONDITION")
-    elif inspection_score >= 50:
+    elif total_score >= 50:
         st.warning("FAIR CONDITION")
-    elif inspection_score >= 40:
+    elif total_score >= 40:
         st.warning("POOR CONDITION")
-    elif inspection_score >= 30:
+    elif total_score >= 30:
         st.error("VERY POOR CONDITION")
     else:
         st.error("CRITICAL CONDITION")
@@ -100,140 +108,350 @@ def display_total_score(inspection_score):
 # Cleaning Suggestions Based on Scores
 def cleaning_suggestions(predictions):
     suggestions = []
-    # Check for evenly cleaned panel
-    if predictions["Clean Panel"] > 70 and predictions["Physical Damage"] < 10:
-        return ["No cleaning required. Panel appears to be in excellent condition."]
 
-    if predictions["Physical Damage"] > 30:
-        suggestions.append("Repair physical damage immediately")
-    if predictions["Electrical Damage"] > 40:
-        suggestions.append("Consult electrical engineer")
-    if predictions["Snow Covered"] > 50:
-        suggestions.append("Remove snow accumulation")
-    if predictions["Water Obstruction"] > 40:
-        suggestions.append("Clear water obstructions")
-    if predictions["Foreign Particle Contamination"] > 40:
-        suggestions.append("Clean foreign particles")
-    if predictions["Bird Interference"] > 40:
-        suggestions.append("Install bird deterrents")
-    return suggestions or ["No critical issues detected"]
-
-# Enhanced Get Weighted Value Based on Ranges with Smoother Transitions
-def get_weighted_value(score, ranges):
-    # Direct match within a range
-    for min_val, max_val, weight in ranges:
-        if min_val <= score < max_val:
-            # Add smooth transition near range boundaries (within 5 points)
-            if score - min_val < 5 and min_val > 0:
-                # Transitioning from previous range
-                prev_weight = 0
-                for prev_min, prev_max, prev_w in ranges:
-                    if prev_max == min_val:
-                        prev_weight = prev_w
-                        break
-
-                # Calculate blend factor (0-1) for smooth transition
-                blend = (score - min_val) / 5
-                # Interpolate between previous weight and current weight
-                interpolated_weight = prev_weight * (1 - blend) + weight * blend
-                return interpolated_weight
-
-            elif max_val - score < 5 and max_val < 101:
-                # Transitioning to next range
-                next_weight = 0
-                for next_min, next_max, next_w in ranges:
-                    if next_min == max_val:
-                        next_weight = next_w
-                        break
-
-                # Calculate blend factor (0-1) for smooth transition
-                blend = (max_val - score) / 5
-                # Interpolate between current weight and next weight
-                interpolated_weight = weight * blend + next_weight * (1 - blend)
-                return interpolated_weight
-
-            # Standard case - in the middle of a range
-            return weight
+    # Clean panel check
+    clean_panel = predictions.get("Clean Panel", 0)
+    if clean_panel > 90 and predictions.get("Physical Damage", 0) < 10 and predictions.get("Electrical Damage", 0) < 10:
+        return ["🟢 No cleaning required. Panel is in excellent condition."]
     
-    # Default fallback - should rarely occur if ranges are properly defined
-    return 0
+    if clean_panel < 70:
+        suggestions.append("🟠 Cleaning required. Dirt accumulation may impact efficiency.")
 
-# Compute Inspection Score with Enhanced Weighting and Variation
-def compute_inspection_score(predictions):
-    total = 0
-    weighted_scores = {}
+    # Physical Damage
+    damage = predictions.get("Physical Damage", 0)
+    if damage > 90:
+        suggestions.append("🔴 Critical physical damage! Immediate repair required.")
+    elif damage > 80:
+        suggestions.append("🔴 Critical physical damage! Immediate repair required.")
+    elif damage > 70:
+        suggestions.append("🟠 High physical damage. Repair strongly recommended.")
+    elif damage > 60:
+        suggestions.append("🟠 High physical damage. Repair strongly recommended.")
+    elif damage > 50:
+        suggestions.append("🟠 High physical damage. Repair strongly recommended.")
+    elif damage > 40:
+        suggestions.append("🟠 High physical damage. Repair strongly recommended.")
+    elif damage > 30:
+        suggestions.append("🟡 Moderate physical damage. Schedule maintenance soon.")
+    elif damage > 20:
+        suggestions.append("🟡 Noticeable physical damage. Preventive action advised.")
+    elif damage > 10:
+        suggestions.append("🟡 Negligible physical damage detected. Preventive steps recommended.")
+    elif damage > 5:
+        suggestions.append("🟡 Negligible physical damage detected. Preventive steps recommended.")
 
-    # Calculate base weighted score with non-linear scaling
-    for label, score in predictions.items():
-        if label == "Panel Detected":
-            continue  # Skip Panel Detected label
+    # Electrical Damage
+    electrical = predictions.get("Electrical Damage", 0)
+    if electrical > 90:
+        suggestions.append("🔴 Critical electrical damage! Immediate expert consultation required.")
+    elif electrical > 80:
+        suggestions.append("🔴 Severe electrical issue. Urgent inspection required.")
+    elif electrical > 70:
+        suggestions.append("🔴 High electrical damage. Troubleshooting required soon.")
+    elif electrical > 60:
+        suggestions.append("🔴 High electrical damage. Troubleshooting required soon.")
+    elif electrical > 50:
+        suggestions.append("🔴 High electrical damage. Troubleshooting required soon.")
+    elif electrical > 40:
+        suggestions.append("🔴 High electrical damage. Troubleshooting required soon.")
+    elif electrical > 30:
+        suggestions.append("🟠 Low electrical concern detected. Monitor for worsening symptoms.")
+    elif electrical > 20:
+        suggestions.append("🟠 Very minor electrical issue. No immediate action required but stay cautious.")
+    elif electrical > 10:
+        suggestions.append("🟠 Negligible electrical concern detected. Preventive steps recommended.")
 
-        config = CLASS_CONFIG[label]
-        weighted_value = get_weighted_value(score, config["ranges"])
 
-        # Apply importance multiplier based on label
-        if label == "Physical Damage" or label == "Electrical Damage":
-            importance_factor = 1.3
-        elif label == "Clean Panel":
-            importance_factor = 1.2
-        else:
-            importance_factor = 1.0
+    # Snow Coverage
+    snow = predictions.get("Snow Covered", 0)
+    if snow > 90:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 80:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 70:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 60:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 50:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 40:
+        suggestions.append("🔴 Panel fully covered with snow! Immediate removal needed.")
+    elif snow > 30:
+        suggestions.append("🟠 Low snow presence. No immediate action but prevent buildup.")
+    elif snow > 20:
+        suggestions.append("🟠 Low snow presence. No immediate action but prevent buildup.")
+    elif snow > 10:
+        suggestions.append("🟠 Low snow presence. No immediate action but prevent buildup.")
 
-        weighted_value *= importance_factor
-        weighted_scores[label] = weighted_value * score
-        total += weighted_value * score
+    # Water Obstruction
+    water = predictions.get("Water Obstruction", 0)
+    if water > 90:
+        suggestions.append("🔴 Heavy water accumulation. Cleaning recommended urgently.")
+    elif water > 80:
+        suggestions.append("🔴 Heavy water accumulation. Cleaning recommended urgently.")
+    elif water > 70:
+        suggestions.append("🔴 Heavy water accumulation. Cleaning recommended urgently.")
+    elif water > 60:
+        suggestions.append("🔴 Heavy water accumulation. Cleaning recommended urgently.")
+    elif water > 50:
+        suggestions.append("🟠 Moderate water presence. Consider clearing soon.")
+    elif water > 40:
+        suggestions.append("🟠 Moderate water presence. Consider clearing soon.")
+    elif water > 30:
+        suggestions.append("🟠 Moderate water presence. Consider clearing soon.")
+    elif water > 20:
+        suggestions.append("🟠 Moderate water presence. Consider clearing soon.")
+    elif water > 10:
+        suggestions.append("🟠 Moderate water presence. Consider clearing soon.")
 
-    # Calculate max possible score more accurately
-    max_possible = sum(100 * max(w for _, _, w in cfg["ranges"]) *
-                      (1.3 if label in ["Physical Damage", "Electrical Damage"] else
-                       1.2 if label == "Clean Panel" else 1.0)
-                      for label, cfg in CLASS_CONFIG.items() if label != "Panel Detected")
+    # Foreign Particle Contamination (Dust, Dirt, etc.)
+    contamination = predictions.get("Foreign Particle Contamination", 0)
+    if contamination > 90:
+        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+    elif contamination > 80:
+        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+    elif contamination > 70:
+        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+    elif contamination > 60:
+        suggestions.append("🔴 Heavy dust accumulation. Clean the panel soon.")
+    elif contamination > 50:
+        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+    elif contamination > 40:
+        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+    elif contamination > 30:
+        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+    elif contamination > 20:
+        suggestions.append("🟠 Moderate dust accumulation detected. Cleaning recommended.")
+    elif contamination > 10:
+        suggestions.append("🟢 Light contamination present. Preventive cleaning advised.")
+    elif contamination > 5:
+        suggestions.append("🟢 Light contamination present. Preventive cleaning advised.")
 
-    # Normalize with better scaling
-    normalized = (total / abs(max_possible)) * 100 if max_possible != 0 else 0
+    # Bird Droppings/Interference
+    birds = predictions.get("Bird Interference", 0)
+    if birds > 90:
+        suggestions.append("🔴 Severe bird interference! Install deterrents immediately.")
+    elif birds > 80:
+        suggestions.append("🔴 Severe bird interference! Install deterrents immediately.")
+    elif birds > 70:
+        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+    elif birds > 60:
+        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+    elif birds > 50:
+        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+    elif birds > 40:
+        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+    elif birds > 30:
+        suggestions.append("🟠 Moderate bird presence. Deterrents may be needed.")
+    elif birds > 20:
+        suggestions.append("🟡 Light bird activity. Monitor and take action if needed.")
+    elif birds > 10:
+        suggestions.append("🟡 Light bird activity. Monitor and take action if needed.")
 
-    # Non-linear transformation (S-curve)
-    x = normalized / 100.0
-    transformed = 0.5 * (np.tanh(3 * (x - 0.5)) + 1)  # S-curve
-    final_score = transformed * 100
-    final_score = np.clip(final_score, 0, 100)
+    return suggestions or ["🟢 No major issues detected. Panel in reasonable condition."]
 
-    return final_score
+
 
 # Scoring Configuration for Each Class
 CLASS_CONFIG = {
     "Panel Detected": {
-        "ranges": [(0, 10, 0), (10, 20, 0), (20, 30, 0.05), (30, 40, 0.1), (40, 50, 0.2), (50, 60, 0.6), (60, 70, 0.6), (70, 80, 0.7), (80, 90, 0.7), (90, 101, 0.7)]
+        "ranges": [(0, 5, 0), (5, 10, 0),
+                   (10, 15, 0), (15, 20, 0), 
+                   (20, 25, 0.05), (25, 30, 0.05), 
+                   (30, 35, 0.1), (35, 40, 0.1),
+                   (40, 45, 0.2), (45, 50, 0.2),
+                   (50, 55, 0.6), (55, 60, 0.6),
+                   (60, 65, 0.6), (65, 70, 0.6),
+                   (70, 75, 0.7), (75, 80, 0.7),
+                   (80, 85, 0.8), (85, 90, 0.85),
+                   (90, 95, 0.9), (95, 101, 0.9)]
     },
     "Clean Panel": {
-        "ranges": [(0, 10, 0.05), (10, 20, 0.05), (20, 30, 0.1), (30, 40, 0.15), (40, 50, 0.2), (50, 60, 0.2), (60, 70, 0.25), (70, 80, 0.25), (80, 90, 0.25), (90, 101, 0.3)]
+        "ranges": [(0, 5, 0.7), (5, 10, 0.7),
+                   (10, 15, 0.7), (15, 20, 0.7),
+                   (20, 25, 0.5), (25, 30, 0.5),
+                   (30, 35, 0.5), (35, 40, 0.5),
+                   (40, 45, 0.2), (45, 50, 0.2),
+                   (50, 55, 0.2), (55, 60, 0.2),
+                   (60, 65, 0.5), (65, 70, 0.1),
+                   (70, 75, 0.5), (75, 80, 0.1),
+                   (80, 85, 0.05), (85, 90, 0.05),
+                   (90, 95, 0.05), (95, 101, 0.05)]
     },
     "Physical Damage": {
-        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     },
     "Electrical Damage": {
-        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     },
     "Snow Covered": {
-        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     },
     "Water Obstruction": {
-        "ranges": [(0, 10, 0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     },
     "Foreign Particle Contamination": {
-        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     },
     "Bird Interference": {
-        "ranges": [(0, 10, -0.05), (10, 20, -0.05), (20, 30, -0.1), (30, 40, -0.2), (40, 50, -0.3), (50, 60, -0.4), (60, 70, -0.45), (70, 80, -0.45), (80, 90, -0.55), (90, 101, -0.55)]
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
     }
 }
 
-# Function to print label analysis to the terminal
-def print_label_analysis(predictions):
-    print("--- Label Analysis ---")
-    for label, score in predictions.items():
-        print(f"{label}: {score:.1f}%")
-    print("----------------------")
+SCORE_RATIOS = {
+    "Panel Detected": {
+        "ranges": [(0, 5, 0), (5, 10, 0),
+                   (10, 15, 0), (15, 20, 0), 
+                   (20, 25, 0.05), (25, 30, 0.05), 
+                   (30, 35, 0.1), (35, 40, 0.1),
+                   (40, 45, 0.2), (45, 50, 0.2),
+                   (50, 55, 0.6), (55, 60, 0.6),
+                   (60, 65, 0.6), (65, 70, 0.6),
+                   (70, 75, 0.7), (75, 80, 0.7),
+                   (80, 85, 0.8), (85, 90, 0.85),
+                   (90, 95, 0.9), (95, 101, 0.9)]
+    },
+    "Clean Panel": {
+        "ranges": [(0, 5, 0.7), (5, 10, 0.7),
+                   (10, 15, 0.7), (15, 20, 0.7),
+                   (20, 25, 0.5), (25, 30, 0.5),
+                   (30, 35, 0.5), (35, 40, 0.5),
+                   (40, 45, 0.2), (45, 50, 0.2),
+                   (50, 55, 0.2), (55, 60, 0.2),
+                   (60, 65, 0.5), (65, 70, 0.1),
+                   (70, 75, 0.5), (75, 80, 0.1),
+                   (80, 85, 0.05), (85, 90, 0.05),
+                   (90, 95, 0.05), (95, 101, 0.05)]
+    },
+    "Physical Damage": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    },
+    "Electrical Damage": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    },
+    "Snow Covered": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    },
+    "Water Obstruction": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    },
+    "Foreign Particle Contamination": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    },
+    "Bird Interference": {
+        "ranges": [(0, 2, -1), (2, 5, -0.8), (5, 10, -0.8),
+                   (10, 15, -0.7), (15, 20, -0.7),
+                   (20, 25, -0.5), (25, 30, -0.5),
+                   (30, 35, -0.2), (35, 40, -0.2),
+                   (40, 45, -0.3), (45, 50, -0.3),
+                   (50, 55, -0.4), (55, 60, -0.4),
+                   (60, 65, -0.45), (65, 70, -0.45),
+                   (70, 75, -0.45), (75, 80, -0.45),
+                   (80, 85, -0.55), (85, 90, -0.55),
+                   (90, 95, -0.55), (95, 101, -0.55)]
+    }
+}
+
+
 
 # Main Function for Streamlit App
 def main():
@@ -280,7 +498,7 @@ def main():
         st.warning("Logo not found. Using default title.")
 
     # Tabs for Different Sections
-    tabs = st.tabs(["How to Use", "Upload Image", "Label Analysis", "Total Score",  "Outcome"])
+    tabs = st.tabs(["How to Use", "Upload Image", "Panel Analysis", "Total Score", "Suggestion"])
 
     with tabs[0]:
         st.header("User Guide")
@@ -290,7 +508,7 @@ def main():
             - **Upload an Image**: Go to the 'Upload Image' tab and upload a clear image of your solar panel.
             - **Preview**: After uploading the image successfully you will see a preview of it.
             - **Analysis**: The system will evaluate cleanliness and detect potential issues such as physical damage or obstructions.
-            - **Scores**: The system provides an overall inspection score along with detailed label analysis.
+            - **Scores**: The system provides an overall inspection score along with detailed panel analysis.
             """)
 
     # Store model, image, tensor, and predictions in session state
@@ -320,10 +538,12 @@ def main():
             except Exception as e:
                 st.error(f"Error loading inspection model v2.0: {e}")
                 st.session_state.inspection_model_v20 = None
-            with tabs[1]:
-                st.header("Upload Image")
+
+    with tabs[1]:
+        st.header("Upload Image")
 
         uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
+
         if uploaded_file is not None:
             # Open the image and store it in the session state
             image = open_image(uploaded_file)
@@ -350,7 +570,7 @@ def main():
                     st.stop()  # Stop execution here
 
                 else:
-                    st.success("Image uploaded. Check the 'Total Score' and 'Label Analysis' tabs.")
+                    st.success("Image uploaded. Check the 'Panel Analysis' and 'Total Score' tabs.")
                     st.session_state.panel_predictions = panel_predictions # store in session state
 
             else:
@@ -358,55 +578,120 @@ def main():
 
     #Moved here
     with tabs[2]:
-        st.header("Label Analysis")
+        st.header("Panel Analysis")
         if 'image_tensor' in st.session_state and \
            st.session_state.inspection_model_v11 is not None and \
-           st.session_state.inspection_model_v20 is not None:
+           st.session_state.inspection_model_v20 is not None and \
+           'panel_predictions' in st.session_state:
 
-            st.subheader("Label Predictions - Model v1.1")
+            # Get predictions from both models
             predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
-            print_label_analysis(predictions_v11)
-            for label, score in predictions_v11.items():
-                st.text(f"{label}: {score:.1f}%")
-
-            st.subheader("Label Predictions - Model v2.0")
             predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
-            print_label_analysis(predictions_v20)
-            for label, score in predictions_v20.items():
-                st.text(f"{label}: {score:.1f}%")
 
-            st.session_state.predictions_v11 = predictions_v11
-            st.session_state.predictions_v20 = predictions_v20
+            # Combine predictions based on your logic
+            final_predictions = {}
+            for label in CLASS_CONFIG.keys():
+                if label == "Clean Panel":
+                    final_predictions[label] = max(predictions_v11[label], predictions_v20[label])
+                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
+                    final_predictions[label] = min(predictions_v11[label], predictions_v20[label])
+                elif label == "Panel Detected":
+                    final_predictions[label] = predictions_v20[label] # Use v2.0 prediction
+
+                else:
+                    # Handle other cases if needed, possibly raise an error
+                    st.error(f"Unexpected label: {label}")
+                    continue
+
+            st.session_state.inspection_predictions = final_predictions  # store in session state
+            print_label_analysis(final_predictions)  # Print detailed analysis to the terminal
+
+            # Convert scores to string and append '%' symbol
+            df = pd.DataFrame.from_dict(final_predictions, orient='index', columns=['Score'])
+            df['Score'] = df['Score'].astype(str) + '%'
+
+            st.markdown("""
+                <style>
+                    div[data-testid="stDataFrame"] td {
+                        text-align: center !important;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
+
+            st.dataframe(df)
         else:
-            st.warning("Upload an image and ensure models are loaded to see label analysis.")
+            st.info("Upload an image in 'Upload Image' tab to see the panel analysis.")
 
     with tabs[3]:
         st.header("Total Score")
-        if 'predictions_v11' in st.session_state and 'predictions_v20' in st.session_state:
-            st.subheader("Inspection Score - Model v1.1")
-            inspection_score_v11 = compute_inspection_score(st.session_state.predictions_v11)
-            display_total_score(inspection_score_v11)
+        if 'image_tensor' in st.session_state and \
+        st.session_state.inspection_model_v11 is not None and \
+        st.session_state.inspection_model_v20 is not None and \
+        'panel_predictions' in st.session_state:
 
-            st.subheader("Inspection Score - Model v2.0")
-            inspection_score_v20 = compute_inspection_score(st.session_state.predictions_v20)
-            display_total_score(inspection_score_v20)
+            # Get predictions from both models
+            predictions_v11 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v11, device)
+            predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
+
+            # Combine predictions
+            final_predictions = {}
+            for label in SCORE_RATIOS.keys():
+                if label == "Clean Panel":
+                    final_predictions[label] = float(min(predictions_v11[label], predictions_v20[label]))
+                elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
+                    final_predictions[label] = float(min(predictions_v11[label], predictions_v20[label]))
+                elif label == "Panel Detected":
+                    final_predictions[label] = float(predictions_v20[label])  # Use v2.0 prediction
+                else:
+                    st.error(f"Unexpected label: {label}")
+                    continue
+
+            # Calculate Total Score
+            total_score = 0.0
+            for label, value in final_predictions.items():
+                if label in SCORE_RATIOS:
+                    for (low, high, ratio) in SCORE_RATIOS[label]["ranges"]:
+                        if low <= value < high:
+                            total_score += value * ratio
+                            break  # Exit loop once correct range is found
+
+            display_total_score(total_score)
+
         else:
-            st.warning("Label analysis needs to be done first.")
+            st.info("Run Panel Analysis first to calculate the Total Score.")
+
+
 
     with tabs[4]:
-        st.header("Outcome")
-        if 'predictions_v11' in st.session_state and 'predictions_v20' in st.session_state:
-            st.subheader("Cleaning Suggestions - Model v1.1")
-            suggestions_v11 = cleaning_suggestions(st.session_state.predictions_v11)
-            for suggestion in suggestions_v11:
+        st.header("Suggestion")
+        if 'image_tensor' in st.session_state and \
+        st.session_state.inspection_model_v11 is not None and \
+        st.session_state.inspection_model_v20 is not None and \
+        'inspection_predictions' in st.session_state:
+
+            # Access stored predictions from Label Analysis (or recalculate if needed)
+            predictions = st.session_state.inspection_predictions
+
+            # Get cleaning suggestions
+            suggestions = cleaning_suggestions(predictions)
+
+            # Sort suggestions based on severity (keeping original order for same severity)
+            severity_order = {
+                "🔴": 1,  # Highest severity
+                "🟠": 2,
+                "🟡": 3,
+                "🟢": 4  # Lowest severity
+            }
+            
+            # Sort suggestions based on severity marker
+            sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s[:1], 5))
+
+            # Display sorted suggestions
+            for suggestion in sorted_suggestions:
                 st.markdown(f"- {suggestion}")
 
-            st.subheader("Cleaning Suggestions - Model v2.0")
-            suggestions_v20 = cleaning_suggestions(st.session_state.predictions_v20)
-            for suggestion in suggestions_v20:
-                st.markdown(f"- {suggestion}")
         else:
-            st.warning("Generate total score first to see outcome.")
+            st.info("Upload an image in 'Upload Image' tab to see the suggestions.")
 
 if __name__ == "__main__":
     main()
