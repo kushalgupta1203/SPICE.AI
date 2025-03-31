@@ -487,11 +487,7 @@ def main():
         st.error(f"Error with logo display: {e}")
         st.title("SPICE.AI: Solar Panel Inspection & Classification Engine")
         st.warning("Logo not found. Using default title.")
-
-    # Add a visual separator
-    st.markdown("---")
     
-    # Store model, image, tensor, and predictions in session state
     if 'panel_detection_model' not in st.session_state:
         try:
             panel_model_url = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v2.0.pth"
@@ -519,14 +515,14 @@ def main():
             st.error(f"Error loading inspection model v2.0: {e}")
             st.session_state.inspection_model_v20 = None
 
-    uploaded_file = st.file_uploader("Upload solar panel image", type=["jpg", "jpeg", "png", "webp"])
+    uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png", "webp"])
 
     if uploaded_file is not None:
         # Open the image and store it in the session state
         image = open_image(uploaded_file)
         if image is not None:
             st.session_state.image = image
-            st.write("Uploaded Image:")
+            st.header("Uploaded Image:")
             display_compressed_image(image)  # Display smaller version
 
             # Preprocess the image and store the tensor in the session state
