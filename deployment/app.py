@@ -568,9 +568,9 @@ def main():
         final_predictions = {}
         for label in CLASS_CONFIG.keys():
             if label == "Clean Panel":
-                final_predictions[label] = (0.25 * predictions_v11[label]) + (0.75 * predictions_v20[label])
+                final_predictions[label] = (0.15 * predictions_v11[label]) + (0.85 * predictions_v20[label])
             elif label in ["Physical Damage", "Electrical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination", "Bird Interference"]:
-                final_predictions[label] = (0.25 * predictions_v11[label]) + (0.75 * predictions_v20[label])
+                final_predictions[label] = (0.15 * predictions_v11[label]) + (0.85 * predictions_v20[label])
             elif label == "Panel Detected":
                 final_predictions[label] = predictions_v20[label]
             else:
