@@ -8,4 +8,3 @@ Pillow
 scikit-learn
 matplotlib
 torchvision
-
