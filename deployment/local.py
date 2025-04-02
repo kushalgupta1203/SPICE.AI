@@ -560,26 +560,27 @@ def main():
         predictions_v20 = predict(st.session_state.image_tensor, st.session_state.inspection_model_v20, device)
 
         final_predictions = {}
+
         for label in CLASS_CONFIG.keys():
             if label == "Clean Panel":
                 final_predictions[label] = (0.3 * predictions_v11[label]) + (0.7 * predictions_v20[label])
-            elif label in "Physical Damage":
+            elif label == "Physical Damage":
                 final_predictions[label] = (0.5 * predictions_v11[label]) + (0.5 * predictions_v20[label])
-            if label == "Electrical Damage":
+            elif label == "Electrical Damage":
                 final_predictions[label] = (0.4 * predictions_v11[label]) + (0.6 * predictions_v20[label])
-            elif label in "Snow Covered":
+            elif label == "Snow Covered":
                 final_predictions[label] = (0.5 * predictions_v11[label]) + (0.5 * predictions_v20[label])
-            if label == "Water Obstruction":
+            elif label == "Water Obstruction":
                 final_predictions[label] = (0.2 * predictions_v11[label]) + (0.8 * predictions_v20[label])
-            if label == "Foreign Particle Contamination":
+            elif label == "Foreign Particle Contamination":
                 final_predictions[label] = (0.4 * predictions_v11[label]) + (0.6 * predictions_v20[label])
-            if label == "Bird Interference":
+            elif label == "Bird Interference":
                 final_predictions[label] = (0.3 * predictions_v11[label]) + (0.7 * predictions_v20[label])
             elif label == "Panel Detected":
                 final_predictions[label] = predictions_v20[label]
             else:
                 st.error(f"Unexpected label: {label}")
-                continue
+
 
         st.session_state.inspection_predictions = final_predictions
         st.header("Inspection Analysis:")
