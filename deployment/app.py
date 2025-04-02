@@ -571,15 +571,15 @@ def main():
             if label == "Clean Panel":
                 final_predictions[label] = (0.3 * predictions_v11[label]) + (0.7 * predictions_v20[label])
             elif label == "Physical Damage":
-                final_predictions[label] = (0.5 * predictions_v11[label]) + (0.5 * predictions_v20[label])
+                final_predictions[label] = (0.6 * predictions_v11[label]) + (0.6 * predictions_v20[label])
             elif label == "Electrical Damage":
-                final_predictions[label] = (0.4 * predictions_v11[label]) + (0.6 * predictions_v20[label])
+                final_predictions[label] = (0.6 * predictions_v11[label]) + (0.6 * predictions_v20[label])
             elif label == "Snow Covered":
                 final_predictions[label] = (0.5 * predictions_v11[label]) + (0.5 * predictions_v20[label])
             elif label == "Water Obstruction":
                 final_predictions[label] = (0.2 * predictions_v11[label]) + (0.8 * predictions_v20[label])
             elif label == "Foreign Particle Contamination":
-                final_predictions[label] = (0.4 * predictions_v11[label]) + (0.6 * predictions_v20[label])
+                final_predictions[label] = (0.4 * predictions_v11[label]) + (0.4 * predictions_v20[label])
             elif label == "Bird Interference":
                 final_predictions[label] = (0.3 * predictions_v11[label]) + (0.7 * predictions_v20[label])
             elif label == "Panel Detected":
