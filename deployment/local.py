@@ -209,7 +209,7 @@ def cleaning_suggestions(predictions):
     elif contamination > 50:
         suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 40:
-        suggestions.append("🟠 Moderate foreign particlet accumulation detected. Cleaning recommended.")
+        suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 30:
         suggestions.append("🟠 Moderate foreign particle accumulation detected. Cleaning recommended.")
     elif contamination > 20:
