@@ -12,6 +12,7 @@ python dataset/merge.py
 python dataset/split.py
 
 # Step 3: Train model
+python train/train_v1.1.py
 python train/train_v2.0.py
 
 # Step 4: Test model

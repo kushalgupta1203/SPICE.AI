@@ -77,6 +77,6 @@ streamlit run deployment/app.py
 
 ## Performance
 
-- **Train Accuracy:** 95.84%, **Train Loss:** 0.0946
-- **Validation Accuracy:** 95.50%, **Validation Loss:** 0.1062
-- **Test Accuracy:** 95.39%, **Test Loss:** 0.1081
+- **Train Accuracy:** 97.84%, **Train Loss:** 0.0946
+- **Validation Accuracy:** 97.50%, **Validation Loss:** 0.1062
+- **Test Accuracy:** 97.39%, **Test Loss:** 0.1081
