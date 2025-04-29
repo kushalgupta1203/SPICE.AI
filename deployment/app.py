@@ -255,7 +255,7 @@ def cleaning_suggestions(predictions):
 # Scoring Configuration for Each Class
 CLASS_CONFIG = {
     "Panel Detected": {
-        "ranges": [(0, 101, 0.985)]
+        "ranges": [(0, 49, 0), (49, 60, 1.5), (60, 80, 1.2), (80, 90, 1.1), (90, 95, 1.05), (95, 100, 1)]
     },
     "Clean Panel": {
         "ranges": [(0, 2, -0.917), (2, 4, -0.925), (4, 6, -0.936), (6, 8, -0.948), (8, 10, -0.95),
