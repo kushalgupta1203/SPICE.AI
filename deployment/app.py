@@ -385,9 +385,14 @@ def process_batch_images(image_files: List[str],
                 image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
             )
             total_score = calculate_total_score(predictions)
+            # Generate suggestions
+            suggestions_list = cleaning_suggestions(predictions)
+            suggestions_text = "; ".join(suggestions_list)  # Join with semicolons for CSV readability
+
             result_data = {
                 "Image Name": image_name,
                 "Total Score": round(total_score, 2),
+                "Suggestions": suggestions_text,
                 **{label: round(score, 2) for label, score in predictions.items()}
             }
             all_results.append(result_data)
@@ -601,7 +606,9 @@ def main():
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
                             # Reorder columns for better readability
-                            cols_order = ["Image Name", "Total Score"] + [k for k in CLASS_CONFIG.keys() if k != "Panel Detected"] + ["Panel Detected"]
+                            cols_order = ["Image Name", "Panel Detected", "Clean Panel", "Electrical Damage",
+                                          "Physical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination",
+                                          "Bird Interference", "Total Score", "Suggestions"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
                             st.dataframe(df_results, use_container_width=True)
 
