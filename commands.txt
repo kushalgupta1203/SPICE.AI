@@ -20,4 +20,6 @@ python testing/test.py
 
 # Step 5: Deploy model
 streamlit run deployment/local.py
+streamlit run deployment/single.py
+streamlit run deployment/batch.py
 streamlit run deployment/app.py
