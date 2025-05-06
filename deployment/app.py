@@ -400,7 +400,7 @@ def main():
     """Main function to run the Streamlit application."""
     st.set_page_config(page_title="SPICE.AI", layout="wide")
 
-    # --- Device Configuration (Moved from Sidebar to hidden) ---
+    # --- Device Configuration (Hidden) ---
     if torch.cuda.is_available():
         device = torch.device("cuda")
     else:
@@ -425,7 +425,7 @@ def main():
     """, unsafe_allow_html=True)
     st.markdown("---")
 
-    # --- Model Loading (Cached, Status messages moved to main area) ---
+    # --- Model Loading (Cached, but no status messages) ---
     @st.cache_resource
     def load_all_models(device):
         # Loads all required models and caches them.
@@ -436,47 +436,43 @@ def main():
             # Reuse v2.0 model for panel detection as well
             models_dict['panel_detection_model'] = models_dict['inspection_model_v20']
         except Exception:
-            # Error logged in load_model
+            # Error logged in load_model but not displayed
             models_dict['inspection_model_v20'] = None
             models_dict['panel_detection_model'] = None
         try:
             model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v1.1.pth"
             models_dict['inspection_model_v11'] = load_model(model_url_v11, device, num_classes=8)
         except Exception:
-            # Error logged in load_model
+            # Error logged in load_model but not displayed
             models_dict['inspection_model_v11'] = None
         return models_dict
 
-    # Show model loading message in main area
-    with st.spinner("Loading models..."):
-        models_loaded = load_all_models(device)
+    # Load models silently without showing status
+    models_loaded = load_all_models(device)
     
-    # Check if essential models loaded successfully
+    # Check if essential models loaded successfully - skip showing errors to user
     if not models_loaded.get('panel_detection_model') or \
        not models_loaded.get('inspection_model_v11') or \
        not models_loaded.get('inspection_model_v20'):
-        st.error("🔴 One or more essential models failed to load. Application cannot continue.")
+        # For internal logging only, not displayed to users
+        import logging
+        logging.error("One or more essential models failed to load.")
         st.stop() # Stop execution if models aren't loaded
-    else:
-        st.success("✅ All models loaded successfully")
 
     # Assign models from the loaded dictionary
     panel_detection_model = models_loaded['panel_detection_model']
     inspection_model_v11 = models_loaded['inspection_model_v11']
     inspection_model_v20 = models_loaded['inspection_model_v20']
 
-    # --- Input Mode Selection ---
-    st.header("Select Input Mode")
-    input_mode = st.radio(
-        "Choose how to provide images:",
-        ["Single Image Upload", "Zip File Batch Upload"],
-        key="input_mode_radio",
-        horizontal=True
-    )
-    st.markdown("---") # Separator
+    # --- Input Mode Selection in Sidebar ---
+    with st.sidebar:
+        input_mode = st.radio(
+            "Input Mode",
+            ["Single Image Upload", "Zip File Batch Upload"],
+            key="input_mode_radio"
+        )
 
     # --- UI Logic for Selected Mode ---
-
     if input_mode == "Single Image Upload":
         st.subheader("Upload a Single Solar Panel Image")
         uploaded_file = st.file_uploader(
@@ -507,11 +503,10 @@ def main():
                     st.image(image, caption=uploaded_file.name, width=400)
 
                 try:
-                    # Show spinner during analysis
-                    with st.spinner("Analyzing image... Please wait."):
-                        final_predictions = process_single_image(
-                            image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
-                        )
+                    # Analyze without showing spinner
+                    final_predictions = process_single_image(
+                        image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
+                    )
 
                     # Display results in the results placeholder
                     with results_placeholder:
@@ -537,8 +532,6 @@ def main():
                     results_placeholder.error(f"⚠️ Analysis Error: {e}")
                 except Exception as e:
                     results_placeholder.error(f"🔴 An unexpected error occurred during analysis: {e}")
-                    # Log error to main area instead of sidebar
-                    st.error(f"Error details: {str(e)}")
             else:
                  # Error opening image is handled by open_image, show warning
                  image_placeholder.warning(f"Could not process the uploaded file: {uploaded_file.name}")
@@ -570,12 +563,11 @@ def main():
             st.info(f"Processing uploaded zip file: **{uploaded_zip.name}**")
             temp_dir = None # Initialize temporary directory variable
             try:
-                # Extract zip file contents
-                with st.spinner(f"Extracting images from {uploaded_zip.name}..."):
-                    with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
-                        # Create a unique temporary directory
-                        temp_dir = tempfile.mkdtemp(prefix="spice_ai_zip_")
-                        zip_ref.extractall(temp_dir)
+                # Extract zip file contents - no spinner
+                with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
+                    # Create a unique temporary directory
+                    temp_dir = tempfile.mkdtemp(prefix="spice_ai_zip_")
+                    zip_ref.extractall(temp_dir)
 
                 # Find valid image files within the extracted directory (recursive search)
                 image_files = []
@@ -590,7 +582,7 @@ def main():
                 else:
                     st.info(f"Found {len(image_files)} images. Starting analysis...")
                     # Create progress bar in the main area
-                    progress_bar = st.progress(0, text="Starting analysis...")
+                    progress_bar = st.progress(0, text="Processing images...")
 
                     # Process the batch of images
                     all_results, error_messages = process_batch_images(
@@ -631,16 +623,14 @@ def main():
                 results_placeholder_batch.error("🔴 Invalid or corrupted zip file.")
             except Exception as e:
                 results_placeholder_batch.error(f"🔴 An unexpected error occurred during zip processing: {e}")
-                # Log error to main area instead of sidebar
-                st.error(f"Error details: {str(e)}")
             finally:
                 # --- Cleanup Temporary Directory ---
                 if temp_dir and os.path.exists(temp_dir):
                     try:
                         shutil.rmtree(temp_dir)
-                    except Exception as e:
-                        # Move cleanup error to main area
-                        st.warning(f"Could not remove temporary directory: {e}")
+                    except Exception:
+                        # Silently handle cleanup errors - no warning to user
+                        pass
         else:
             # Show initial instruction message if no zip file is uploaded yet
             st.info("⬆️ Upload a zip file above to start batch analysis.")
