@@ -417,7 +417,6 @@ def main():
         <div class="desktop-logo"><img src="{desktop_logo_url}" alt="SPICE.AI Desktop Logo"></div>
         <div class="mobile-logo"><img src="{mobile_logo_url}" alt="SPICE.AI Mobile Logo"></div>
     """, unsafe_allow_html=True)
-    st.markdown("---")
 
     # --- Model Loading (Cached, but no status messages) ---
     @st.cache_resource
