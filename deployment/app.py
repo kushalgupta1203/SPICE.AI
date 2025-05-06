@@ -235,14 +235,26 @@ def calculate_total_score(predictions: dict) -> float:
     return max(0.0, min(total_score, 100.0)) # Clamp score
 
 # Display Total Score and Condition Classification
-def display_total_score(total_score: float):
-    """Displays the total score and a qualitative condition assessment."""
-    st.markdown(f"### Total Score: **{total_score:.1f}/100**")
-    if total_score >= 90: st.success("✅ EXCELLENT CONDITION")
-    elif total_score >= 80: st.success("👍 GOOD CONDITION")
-    elif total_score >= 70: st.warning("👌 AVERAGE CONDITION")
-    elif total_score >= 50: st.error("⚠️ POOR CONDITION")
-    else: st.error("🚨 CRITICAL CONDITION")
+def display_total_score(total_score):
+    st.markdown(f"## Total Score: {total_score:.1f}/100")  # Force 1 decimal
+
+    # Add score classification with more granular thresholds
+    if total_score >= 90:
+        st.success("EXCELLENT CONDITION")
+    elif total_score >= 80:
+        st.success("GOOD CONDITION")
+    elif total_score >= 70:
+        st.warning("AVERAGE CONDITION")
+    elif total_score >= 60:
+        st.warning("POOR CONDITION")
+    elif total_score >= 50:
+        st.error("POOR CONDITION")
+    elif total_score >= 40:
+        st.error("CRITICAL CONDITION")
+    elif total_score >= 30:
+        st.error("CRITICAL CONDITION")
+    else:
+        st.error("CRITICAL CONDITION")
 
 # Cleaning Suggestions Based on Scores (Using the detailed version from user example)
 def cleaning_suggestions(predictions: dict) -> List[str]:
@@ -272,7 +284,7 @@ def cleaning_suggestions(predictions: dict) -> List[str]:
     if electrical > 80: suggestions.append(f"🔴 Critical electrical damage ({electrical:.1f}%)! Immediate expert consultation required.")
     elif electrical > 50: suggestions.append(f"🔴 Severe electrical issue ({electrical:.1f}%). Urgent inspection required.")
     elif electrical > 30: suggestions.append(f"🟠 High electrical damage ({electrical:.1f}%). Troubleshooting required soon.")
-    elif electrical > 10: suggestions.append(f"🟠 Low electrical concern detected ({electrical:.1f}%). Monitor for worsening symptoms.")
+    elif electrical > 10: suggestions.append(f"🟡 Low electrical concern detected ({electrical:.1f}%). Monitor for worsening symptoms.")
 
     # Snow Coverage
     snow = predictions.get("Snow Covered", 0)
@@ -525,15 +537,15 @@ def main():
                              st.markdown(f"- {suggestion}")
 
                 except ValueError as e: # Catch panel detection or prediction errors
-                    results_placeholder.error(f"⚠️ Analysis Error: {e}")
+                    results_placeholder.error(f"Analysis Error: {e}")
                 except Exception as e:
-                    results_placeholder.error(f"🔴 An unexpected error occurred during analysis: {e}")
+                    results_placeholder.error(f"An unexpected error occurred during analysis: {e}")
             else:
                  # Error opening image is handled by open_image, show warning
                  image_placeholder.warning(f"Could not process the uploaded file: {uploaded_file.name}")
         else:
             # Show initial instruction message if no file is uploaded yet
-            st.info("⬆️ Upload an image file above to start the analysis.")
+            st.info("Upload an image file above to start the analysis.")
 
 
     elif input_mode == "Zip File Batch Upload":
@@ -572,7 +584,7 @@ def main():
 
                 # Check if any images were found
                 if not image_files:
-                    results_placeholder_batch.warning("⚠️ No valid image files (.png, .jpg, .jpeg, .webp) found in the zip archive.")
+                    results_placeholder_batch.warning("No valid image files (.png, .jpg, .jpeg, .webp) found in the zip archive.")
                 else:
                     # Create progress bar in the main area
                     progress_bar = st.progress(0, text="Processing images...")
@@ -596,26 +608,26 @@ def main():
                         # Provide CSV download button
                         csv_data = df_results.to_csv(index=False).encode('utf-8')
                         download_placeholder_batch.download_button(
-                            label="⬇️ Download Results as CSV", data=csv_data,
+                            label="Download Results as CSV", data=csv_data,
                             file_name=f"spice_ai_{os.path.splitext(uploaded_zip.name)[0]}_results.csv",
                             mime='text/csv', key='download_csv_button_batch' # Unique key
                         )
                     else:
                          # Message if no images could be processed (e.g., all failed detection)
-                         results_placeholder_batch.warning("⚠️ No images were successfully processed from the zip file.")
+                         results_placeholder_batch.warning("No images were successfully processed from the zip file.")
 
                     # Report errors encountered during processing
                     if error_messages:
                         with error_placeholder_batch.container(): # Group error header and messages
-                            st.error("❗️ Errors occurred during processing:")
+                            st.error("Errors occurred during processing:")
                             error_md = ""
                             for msg in error_messages: error_md += f"- {msg}\n"
                             st.markdown(error_md)
 
             except zipfile.BadZipFile:
-                results_placeholder_batch.error("🔴 Invalid or corrupted zip file.")
+                results_placeholder_batch.error("Invalid or corrupted zip file.")
             except Exception as e:
-                results_placeholder_batch.error(f"🔴 An unexpected error occurred during zip processing: {e}")
+                results_placeholder_batch.error(f"An unexpected error occurred during zip processing: {e}")
             finally:
                 # --- Cleanup Temporary Directory ---
                 if temp_dir and os.path.exists(temp_dir):
@@ -626,7 +638,7 @@ def main():
                         pass
         else:
             # Show initial instruction message if no zip file is uploaded yet
-            st.info("⬆️ Upload a zip file above to start batch analysis.")
+            st.info("Upload a zip file above to start batch analysis.")
 
 
 # Entry point for the script
