@@ -12,19 +12,22 @@ import os
 import zipfile
 import tempfile
 import shutil
-from typing import List, Tuple, Optional, Union, Any
+from typing import List, Tuple, Optional, Union, Any # Added Any for broader type hint if needed
 
 # --- Model Loading & Preprocessing ---
 
 # Load Model Function
 def load_model(model_url, device, num_classes=8):
     """
+
     Args:
         model_url (str): The URL to the .pth model file.
         device (torch.device): The device to load the model onto ('cuda' or 'cpu').
         num_classes (int): The number of output classes for the model's classifier.
+
     Returns:
         torch.nn.Module: The loaded PyTorch model.
+
     Raises:
         requests.exceptions.RequestException: If downloading the model fails.
         Exception: For other model loading errors.
@@ -50,8 +53,10 @@ def load_model(model_url, device, num_classes=8):
         model.eval()
         return model
     except requests.exceptions.RequestException as e:
+
         raise
     except Exception as e:
+
         raise
 
 # Image Preprocessing Function
@@ -65,15 +70,19 @@ def preprocess_image(image: Image.Image) -> torch.Tensor:
     return transform(image).unsqueeze(0)
 
 # Open Image Function (Handles both uploaded file object and file path)
+# Corrected the type hint for the uploaded file object
 def open_image(image_source: Union[str, BytesIO, Any]) -> Optional[Image.Image]:
     """
     Safely opens an image from a file path or an uploaded file object.
+
     Args:
         image_source: Path to the image file (str) or an uploaded file object (BytesIO or similar).
+
     Returns:
         PIL.Image.Image or None: The opened image in RGB format, or None if an error occurs.
     """
     image_name = "Uploaded File"
+    # Try to get the name attribute if it exists (for uploaded files)
     if isinstance(image_source, str):
         image_name = os.path.basename(image_source)
     elif hasattr(image_source, 'name'):
@@ -114,7 +123,7 @@ def predict(image_tensor: torch.Tensor, model: nn.Module, device: torch.device) 
 
 # --- Scoring and Suggestions ---
 
-# Scoring Configuration
+# Scoring Configuration (Using the simplified one from the previous step)
 CLASS_CONFIG = {
     "Panel Detected": {
         "ranges": [(0, 49, 0), (49, 60, 1.5), (60, 80, 1.2), (80, 90, 1.1), (90, 95, 1.05), (95, 100, 1)]
@@ -205,6 +214,7 @@ CLASS_CONFIG = {
     }
 }
 
+
 # Function to calculate the total score
 def calculate_total_score(predictions: dict) -> float:
     """Calculates a weighted total score based on individual class predictions."""
@@ -234,9 +244,9 @@ def display_total_score(total_score: float):
     elif total_score >= 50: st.error("⚠️ POOR CONDITION")
     else: st.error("🚨 CRITICAL CONDITION")
 
-# Cleaning Suggestions Based on Scores (Returning only the top suggestion)
-def cleaning_suggestions(predictions: dict) -> str:
-    """Generates maintenance/cleaning suggestions based on prediction scores and returns only the top suggestion."""
+# Cleaning Suggestions Based on Scores (Using the detailed version from user example)
+def cleaning_suggestions(predictions: dict) -> List[str]:
+    """Generates maintenance/cleaning suggestions based on prediction scores."""
     suggestions = []
     severity_order = {"🔴": 1, "🟠": 2, "🟡": 3, "🟢": 4} # For sorting
 
@@ -246,13 +256,13 @@ def cleaning_suggestions(predictions: dict) -> str:
     electrical_damage = predictions.get("Electrical Damage", 0)
 
     if clean_panel > 90 and physical_damage < 10 and electrical_damage < 10:
-        return "🟢 No cleaning required. Panel is in excellent condition."
+        return ["🟢 No cleaning required. Panel is in excellent condition."]
     if clean_panel < 70:
         suggestions.append(f"🟠 Cleaning required (Score: {clean_panel:.1f}%). Dirt accumulation may impact efficiency.")
 
     # Physical Damage
     damage = physical_damage
-    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f})! Immediate repair required.")
+    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f}%)! Immediate repair required.")
     elif damage > 30: suggestions.append(f"🟠 High physical damage ({damage:.1f}%). Repair strongly recommended.")
     elif damage > 10: suggestions.append(f"🟡 Moderate physical damage ({damage:.1f}%). Schedule maintenance soon.")
     elif damage > 5: suggestions.append(f"🟡 Noticeable physical damage ({damage:.1f}%). Preventive action advised.")
@@ -289,11 +299,12 @@ def cleaning_suggestions(predictions: dict) -> str:
     elif birds > 10: suggestions.append(f"🟡 Light bird activity ({birds:.1f}%). Monitor and take action if needed.")
 
     if not suggestions:
-        return "🟢 No major issues detected. Panel appears to be in reasonable condition."
+        return ["🟢 No major issues detected. Panel appears to be in reasonable condition."]
 
-    # Sort suggestions by severity and return only the top one
+    # Sort suggestions by severity
     sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s.split(" ")[0], 5))
-    return sorted_suggestions[0]
+    return sorted_suggestions
+
 
 # --- Image Processing Logic ---
 
@@ -334,6 +345,7 @@ def process_single_image(image: Image.Image,
             final_predictions[label] = predictions_v20.get(label, 0)
     return final_predictions
 
+
 # Function to process a batch of images from file paths
 def process_batch_images(image_files: List[str],
                          panel_detection_model: nn.Module,
@@ -361,13 +373,10 @@ def process_batch_images(image_files: List[str],
                 image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
             )
             total_score = calculate_total_score(predictions)
-            top_suggestion = cleaning_suggestions(predictions) # Get the top suggestion
-
             result_data = {
                 "Image Name": image_name,
                 "Total Score": round(total_score, 2),
-                **{label: round(score, 2) for label, score in predictions.items()},
-                "suggestions": top_suggestion # Add the top suggestion
+                **{label: round(score, 2) for label, score in predictions.items()}
             }
             all_results.append(result_data)
 
@@ -415,29 +424,25 @@ def main():
         # Loads all required models and caches them.
         models_dict = {}
         try:
-            model_url_v20 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true"
+            model_url_v20 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v2.0.pth"
             models_dict['inspection_model_v20'] = load_model(model_url_v20, device, num_classes=8)
             # Reuse v2.0 model for panel detection as well
             models_dict['panel_detection_model'] = models_dict['inspection_model_v20']
         except Exception:
             # Error logged in load_model but not displayed
-            import logging
-            logging.error("Failed to load inspection_model_v20 or panel_detection_model.")
             models_dict['inspection_model_v20'] = None
             models_dict['panel_detection_model'] = None
         try:
-            model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true"
+            model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/main/deployment/spice_ai_mobilenetv3_v1.1.pth"
             models_dict['inspection_model_v11'] = load_model(model_url_v11, device, num_classes=8)
         except Exception:
             # Error logged in load_model but not displayed
-            import logging
-            logging.error("Failed to load inspection_model_v11.")
             models_dict['inspection_model_v11'] = None
         return models_dict
 
     # Load models silently without showing status
     models_loaded = load_all_models(device)
-
+    
     # Check if essential models loaded successfully - skip showing errors to user
     if not models_loaded.get('panel_detection_model') or \
        not models_loaded.get('inspection_model_v11') or \
@@ -456,12 +461,13 @@ def main():
     with st.sidebar:
         st.title("Menu")
         st.subheader("Select Input Mode")
-
+        
         input_mode = st.radio(
             label="",
             options=["Single Image Upload", "Zip File Batch Upload"],
             key="input_mode_radio"
         )
+
 
     # --- UI Logic for Selected Mode ---
     if input_mode == "Single Image Upload":
@@ -479,6 +485,7 @@ def main():
 
         if uploaded_file is not None:
             # Clear previous results before processing new image
+            # This ensures that old results disappear when a new file is uploaded
             results_placeholder.empty()
             suggestions_placeholder.empty()
             image_placeholder.empty()
@@ -488,6 +495,7 @@ def main():
                 # Display the uploaded image
                 with image_placeholder.container(): # Use container to group subheader and image
                     st.subheader("Uploaded Image:")
+                    # Display image, limiting width for consistency
                     st.image(image, caption=uploaded_file.name, width=400)
 
                 try:
@@ -512,9 +520,9 @@ def main():
                     with suggestions_placeholder:
                          st.subheader("Suggestions")
                          suggestions = cleaning_suggestions(final_predictions)
-                         # Display only the top suggestion
-                         st.markdown(f"- {suggestions}")
-
+                         # Display suggestions as a list
+                         for suggestion in suggestions:
+                             st.markdown(f"- {suggestion}")
 
                 except ValueError as e: # Catch panel detection or prediction errors
                     results_placeholder.error(f"⚠️ Analysis Error: {e}")
@@ -582,8 +590,8 @@ def main():
                         with results_placeholder_batch.container(): # Group subheader and table
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
-                            # Reorder columns as requested: file name, total score, panel detected, rest, suggestions
-                            cols_order = ["Image Name", "Total Score", "Panel Detected"] + [k for k in CLASS_CONFIG.keys() if k not in ["Panel Detected", "suggestions"]] + ["suggestions"]
+                            # Reorder columns for better readability
+                            cols_order = ["Image Name", "Total Score"] + [k for k in CLASS_CONFIG.keys() if k != "Panel Detected"] + ["Panel Detected"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
                             st.dataframe(df_results, use_container_width=True)
 
