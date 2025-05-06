@@ -459,7 +459,9 @@ def main():
 
     # --- Input Mode Selection in Sidebar ---
     with st.sidebar:
-        st.subheader("Input Mode")
+        st.title("Menu")
+        st.subheader("Select Input Mode")
+        
         input_mode = st.radio(
             label="",
             options=["Single Image Upload", "Zip File Batch Upload"],
