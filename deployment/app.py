@@ -285,7 +285,7 @@ def cleaning_suggestions(predictions: dict) -> List[str]:
     # Bird Interference
     birds = predictions.get("Bird Interference", 0)
     if birds > 70: suggestions.append(f"🔴 Severe bird interference ({birds:.1f}%)! Install deterrents immediately.")
-    elif birds > 30: suggestions.append(f"🟠 Moderate bird interference ({birds:.1f}%). Deterrents may be needed.")
+    elif birds > 30: suggestions.append(f"🟠 Moderate bird interference ({birds:.1f}%)! Deterrents may be needed.")
     elif birds > 10: suggestions.append(f"🟡 Light bird activity ({birds:.1f}%). Monitor and take action if needed.")
 
     if not suggestions:
@@ -400,13 +400,13 @@ def main():
         .desktop-logo { display: block; margin-bottom: 20px; }
         .mobile-logo { display: none; margin-bottom: 20px; }
         @media (max-width: 768px) { .desktop-logo { display: none; } .mobile-logo { display: block; } }
-        .desktop-logo img, .mobile-logo img { display: block; margin-left: auto; margin-right: auto; max_width: 100%; height: auto; }
-        div[data-testid="stDataFrame"] th { text_align: center !important; }
-        div[data-testid="stDataFrame"] td { text_align: center !important; }
+        .desktop-logo img, .mobile-logo img { display: block; margin-left: auto; margin-right: auto; max-width: 100%; height: auto; }
+        div[data-testid="stDataFrame"] th { text-align: center !important; }
+        div[data-testid="stDataFrame"] td { text-align: center !important; }
         </style>
     """, unsafe_allow_html=True)
-    desktop_logo_url = "[https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true](https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true)"
-    mobile_logo_url = "[https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true](https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true)"
+    desktop_logo_url = "https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true"
+    mobile_logo_url = "https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true"
     st.markdown(f"""
         <div class="desktop-logo"><img src="{desktop_logo_url}" alt="SPICE.AI Desktop Logo"></div>
         <div class="mobile-logo"><img src="{mobile_logo_url}" alt="SPICE.AI Mobile Logo"></div>
@@ -418,7 +418,7 @@ def main():
         # Loads all required models and caches them.
         models_dict = {}
         try:
-            model_url_v20 = "[https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true](https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true)"
+            model_url_v20 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true"
             models_dict['inspection_model_v20'] = load_model(model_url_v20, device, num_classes=8)
             # Reuse v2.0 model for panel detection as well
             models_dict['panel_detection_model'] = models_dict['inspection_model_v20']
@@ -429,7 +429,7 @@ def main():
             models_dict['inspection_model_v20'] = None
             models_dict['panel_detection_model'] = None
         try:
-            model_url_v11 = "[https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true](https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true)"
+            model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true"
             models_dict['inspection_model_v11'] = load_model(model_url_v11, device, num_classes=8)
         except Exception:
             # Error logged in load_model but not displayed
@@ -550,6 +550,7 @@ def main():
             download_placeholder_batch.empty()
             error_placeholder_batch.empty()
 
+            st.info(f"Processing uploaded zip file: **{uploaded_zip.name}**")
             temp_dir = None # Initialize temporary directory variable
             try:
                 # Extract zip file contents - no spinner
@@ -569,6 +570,7 @@ def main():
                 if not image_files:
                     results_placeholder_batch.warning("⚠️ No valid image files (.png, .jpg, .jpeg, .webp) found in the zip archive.")
                 else:
+                    st.info(f"Found {len(image_files)} images. Starting analysis...")
                     # Create progress bar in the main area
                     progress_bar = st.progress(0, text="Processing images...")
 
@@ -584,8 +586,9 @@ def main():
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
                             # Reorder columns as requested: image name, panel detected, rest labels, total score, suggestion
-                            # Exclude 'Total Score' and 'suggestions' from the general keys list for specific placement
-                            other_keys = [k for k in CLASS_CONFIG.keys() if k not in ["Panel Detected", "Total Score", "suggestions"]]
+                            # Exclude relevant keys from the general keys list for specific placement
+                            relevant_keys_for_order = ["Image Name", "Panel Detected", "Total Score", "suggestions"]
+                            other_keys = [k for k in CLASS_CONFIG.keys() if k not in relevant_keys_for_order]
                             cols_order = ["Image Name", "Panel Detected"] + other_keys + ["Total Score", "suggestions"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
 
