@@ -234,9 +234,9 @@ def display_total_score(total_score: float):
     elif total_score >= 50: st.error("⚠️ POOR CONDITION")
     else: st.error("🚨 CRITICAL CONDITION")
 
-# Cleaning Suggestions Based on Scores (Returning only the top suggestion)
-def cleaning_suggestions(predictions: dict) -> str:
-    """Generates maintenance/cleaning suggestions based on prediction scores and returns only the top suggestion."""
+# Cleaning Suggestions Based on Scores (Returns a list of suggestions)
+def cleaning_suggestions(predictions: dict) -> List[str]:
+    """Generates maintenance/cleaning suggestions based on prediction scores."""
     suggestions = []
     severity_order = {"🔴": 1, "🟠": 2, "🟡": 3, "🟢": 4} # For sorting
 
@@ -246,13 +246,13 @@ def cleaning_suggestions(predictions: dict) -> str:
     electrical_damage = predictions.get("Electrical Damage", 0)
 
     if clean_panel > 90 and physical_damage < 10 and electrical_damage < 10:
-        return "🟢 No cleaning required. Panel is in excellent condition."
+        return ["🟢 No cleaning required. Panel is in excellent condition."]
     if clean_panel < 70:
         suggestions.append(f"🟠 Cleaning required (Score: {clean_panel:.1f}%). Dirt accumulation may impact efficiency.")
 
     # Physical Damage
     damage = physical_damage
-    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f})! Immediate repair required.")
+    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f}%)! Immediate repair required.")
     elif damage > 30: suggestions.append(f"🟠 High physical damage ({damage:.1f}%). Repair strongly recommended.")
     elif damage > 10: suggestions.append(f"🟡 Moderate physical damage ({damage:.1f}%). Schedule maintenance soon.")
     elif damage > 5: suggestions.append(f"🟡 Noticeable physical damage ({damage:.1f}%). Preventive action advised.")
@@ -289,11 +289,12 @@ def cleaning_suggestions(predictions: dict) -> str:
     elif birds > 10: suggestions.append(f"🟡 Light bird activity ({birds:.1f}%). Monitor and take action if needed.")
 
     if not suggestions:
-        return "🟢 No major issues detected. Panel appears to be in reasonable condition."
+        return ["🟢 No major issues detected. Panel appears to be in reasonable condition."]
 
-    # Sort suggestions by severity and return only the top one
+    # Sort suggestions by severity
     sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s.split(" ")[0], 5))
-    return sorted_suggestions[0]
+    return sorted_suggestions
+
 
 # --- Image Processing Logic ---
 
@@ -334,6 +335,7 @@ def process_single_image(image: Image.Image,
             final_predictions[label] = predictions_v20.get(label, 0)
     return final_predictions
 
+
 # Function to process a batch of images from file paths
 def process_batch_images(image_files: List[str],
                          panel_detection_model: nn.Module,
@@ -361,13 +363,14 @@ def process_batch_images(image_files: List[str],
                 image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
             )
             total_score = calculate_total_score(predictions)
-            top_suggestion = cleaning_suggestions(predictions) # Get the top suggestion
+            all_suggestions = cleaning_suggestions(predictions) # Get all suggestions
+            top_suggestion = all_suggestions[0] if all_suggestions else "No suggestions" # Get only the top suggestion
 
             result_data = {
                 "Image Name": image_name,
                 "Total Score": round(total_score, 2),
                 **{label: round(score, 2) for label, score in predictions.items()},
-                "suggestions": top_suggestion # Add the top suggestion
+                "suggestions": top_suggestion # Add the top suggestion for CSV
             }
             all_results.append(result_data)
 
@@ -397,13 +400,13 @@ def main():
         .desktop-logo { display: block; margin-bottom: 20px; }
         .mobile-logo { display: none; margin-bottom: 20px; }
         @media (max-width: 768px) { .desktop-logo { display: none; } .mobile-logo { display: block; } }
-        .desktop-logo img, .mobile-logo img { display: block; margin-left: auto; margin-right: auto; max-width: 100%; height: auto; }
-        div[data-testid="stDataFrame"] th { text-align: center !important; }
-        div[data-testid="stDataFrame"] td { text-align: center !important; }
+        .desktop-logo img, .mobile-logo img { display: block; margin-left: auto; margin-right: auto; max_width: 100%; height: auto; }
+        div[data-testid="stDataFrame"] th { text_align: center !important; }
+        div[data-testid="stDataFrame"] td { text_align: center !important; }
         </style>
     """, unsafe_allow_html=True)
-    desktop_logo_url = "https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true"
-    mobile_logo_url = "https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true"
+    desktop_logo_url = "[https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true](https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_comp.png?raw=true)"
+    mobile_logo_url = "[https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true](https://github.com/kushalgupta1203/SPICE.AI/blob/main/deployment/logo_phone.png?raw=true)"
     st.markdown(f"""
         <div class="desktop-logo"><img src="{desktop_logo_url}" alt="SPICE.AI Desktop Logo"></div>
         <div class="mobile-logo"><img src="{mobile_logo_url}" alt="SPICE.AI Mobile Logo"></div>
@@ -415,7 +418,7 @@ def main():
         # Loads all required models and caches them.
         models_dict = {}
         try:
-            model_url_v20 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true"
+            model_url_v20 = "[https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true](https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v2.0.pth?raw=true)"
             models_dict['inspection_model_v20'] = load_model(model_url_v20, device, num_classes=8)
             # Reuse v2.0 model for panel detection as well
             models_dict['panel_detection_model'] = models_dict['inspection_model_v20']
@@ -426,7 +429,7 @@ def main():
             models_dict['inspection_model_v20'] = None
             models_dict['panel_detection_model'] = None
         try:
-            model_url_v11 = "https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true"
+            model_url_v11 = "[https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true](https://raw.githubusercontent.com/kushalgupta1203/SPICE.AI/blob/main/deployment/spice_ai_mobilenetv3_v1.1.pth?raw=true)"
             models_dict['inspection_model_v11'] = load_model(model_url_v11, device, num_classes=8)
         except Exception:
             # Error logged in load_model but not displayed
@@ -512,9 +515,9 @@ def main():
                     with suggestions_placeholder:
                          st.subheader("Suggestions")
                          suggestions = cleaning_suggestions(final_predictions)
-                         # Display only the top suggestion
-                         st.markdown(f"- {suggestions}")
-
+                         # Display all suggestions as a list
+                         for suggestion in suggestions:
+                             st.markdown(f"- {suggestion}")
 
                 except ValueError as e: # Catch panel detection or prediction errors
                     results_placeholder.error(f"⚠️ Analysis Error: {e}")
@@ -547,7 +550,6 @@ def main():
             download_placeholder_batch.empty()
             error_placeholder_batch.empty()
 
-            st.info(f"Processing uploaded zip file: **{uploaded_zip.name}**")
             temp_dir = None # Initialize temporary directory variable
             try:
                 # Extract zip file contents - no spinner
@@ -567,7 +569,6 @@ def main():
                 if not image_files:
                     results_placeholder_batch.warning("⚠️ No valid image files (.png, .jpg, .jpeg, .webp) found in the zip archive.")
                 else:
-                    st.info(f"Found {len(image_files)} images. Starting analysis...")
                     # Create progress bar in the main area
                     progress_bar = st.progress(0, text="Processing images...")
 
@@ -582,13 +583,20 @@ def main():
                         with results_placeholder_batch.container(): # Group subheader and table
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
-                            # Reorder columns as requested: file name, total score, panel detected, rest, suggestions
-                            cols_order = ["Image Name", "Total Score", "Panel Detected"] + [k for k in CLASS_CONFIG.keys() if k not in ["Panel Detected", "suggestions"]] + ["suggestions"]
+                            # Reorder columns as requested: image name, panel detected, rest labels, total score, suggestion
+                            # Exclude 'Total Score' and 'suggestions' from the general keys list for specific placement
+                            other_keys = [k for k in CLASS_CONFIG.keys() if k not in ["Panel Detected", "Total Score", "suggestions"]]
+                            cols_order = ["Image Name", "Panel Detected"] + other_keys + ["Total Score", "suggestions"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
+
+                            # Set index to start from 1
+                            df_results.index = np.arange(1, len(df_results) + 1)
+
                             st.dataframe(df_results, use_container_width=True)
 
                         # Provide CSV download button
-                        csv_data = df_results.to_csv(index=False).encode('utf-8')
+                        # Include index in CSV with header 'Serial Number'
+                        csv_data = df_results.to_csv(index=True, index_label='Serial Number').encode('utf-8')
                         download_placeholder_batch.download_button(
                             label="⬇️ Download Results as CSV", data=csv_data,
                             file_name=f"spice_ai_{os.path.splitext(uploaded_zip.name)[0]}_results.csv",
