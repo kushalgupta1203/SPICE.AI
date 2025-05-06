@@ -16,11 +16,9 @@ from typing import List, Tuple, Optional, Union, Any # Added Any for broader typ
 
 # --- Model Loading & Preprocessing ---
 
-# Load Model Function (Messages moved to sidebar)
+# Load Model Function
 def load_model(model_url, device, num_classes=8):
     """
-    Downloads a model state dictionary from a URL and loads it into a MobileNetV3-Large architecture.
-    Status messages are shown in the sidebar.
 
     Args:
         model_url (str): The URL to the .pth model file.
@@ -35,10 +33,8 @@ def load_model(model_url, device, num_classes=8):
         Exception: For other model loading errors.
     """
     try:
-        st.sidebar.info(f"Downloading model: {os.path.basename(model_url)}...")
         response = requests.get(model_url)
         response.raise_for_status()
-        st.sidebar.info("...download complete.")
 
         model_bytes = BytesIO(response.content)
         model = models.mobilenet_v3_large(weights=None)
@@ -50,19 +46,17 @@ def load_model(model_url, device, num_classes=8):
             nn.Linear(1280, num_classes)
         )
 
-        st.sidebar.info("Loading model state...")
         state_dict = torch.load(model_bytes, map_location=device)
         model.load_state_dict(state_dict, strict=False)
-        st.sidebar.info("...model loaded successfully.")
 
         model.to(device)
         model.eval()
         return model
     except requests.exceptions.RequestException as e:
-        st.sidebar.error(f"Error downloading model {os.path.basename(model_url)}: {e}")
+
         raise
     except Exception as e:
-        st.sidebar.error(f"Error loading model {os.path.basename(model_url)}: {e}")
+
         raise
 
 # Image Preprocessing Function
