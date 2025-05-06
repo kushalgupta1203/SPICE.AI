@@ -234,9 +234,9 @@ def display_total_score(total_score: float):
     elif total_score >= 50: st.error("⚠️ POOR CONDITION")
     else: st.error("🚨 CRITICAL CONDITION")
 
-# Cleaning Suggestions Based on Scores (Returns a list of suggestions)
-def cleaning_suggestions(predictions: dict) -> List[str]:
-    """Generates maintenance/cleaning suggestions based on prediction scores."""
+# Cleaning Suggestions Based on Scores (Returning only the top suggestion)
+def cleaning_suggestions(predictions: dict) -> str:
+    """Generates maintenance/cleaning suggestions based on prediction scores and returns only the top suggestion."""
     suggestions = []
     severity_order = {"🔴": 1, "🟠": 2, "🟡": 3, "🟢": 4} # For sorting
 
@@ -246,13 +246,13 @@ def cleaning_suggestions(predictions: dict) -> List[str]:
     electrical_damage = predictions.get("Electrical Damage", 0)
 
     if clean_panel > 90 and physical_damage < 10 and electrical_damage < 10:
-        return ["🟢 No cleaning required. Panel is in excellent condition."]
+        return "🟢 No cleaning required. Panel is in excellent condition."
     if clean_panel < 70:
         suggestions.append(f"🟠 Cleaning required (Score: {clean_panel:.1f}%). Dirt accumulation may impact efficiency.")
 
     # Physical Damage
     damage = physical_damage
-    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f}%)! Immediate repair required.")
+    if damage > 70: suggestions.append(f"🔴 Critical physical damage ({damage:.1f})! Immediate repair required.")
     elif damage > 30: suggestions.append(f"🟠 High physical damage ({damage:.1f}%). Repair strongly recommended.")
     elif damage > 10: suggestions.append(f"🟡 Moderate physical damage ({damage:.1f}%). Schedule maintenance soon.")
     elif damage > 5: suggestions.append(f"🟡 Noticeable physical damage ({damage:.1f}%). Preventive action advised.")
@@ -285,16 +285,15 @@ def cleaning_suggestions(predictions: dict) -> List[str]:
     # Bird Interference
     birds = predictions.get("Bird Interference", 0)
     if birds > 70: suggestions.append(f"🔴 Severe bird interference ({birds:.1f}%)! Install deterrents immediately.")
-    elif birds > 30: suggestions.append(f"🟠 Moderate bird interference ({birds:.1f}%)! Deterrents may be needed.")
+    elif birds > 30: suggestions.append(f"🟠 Moderate bird interference ({birds:.1f}%). Deterrents may be needed.")
     elif birds > 10: suggestions.append(f"🟡 Light bird activity ({birds:.1f}%). Monitor and take action if needed.")
 
     if not suggestions:
-        return ["🟢 No major issues detected. Panel appears to be in reasonable condition."]
+        return "🟢 No major issues detected. Panel appears to be in reasonable condition."
 
-    # Sort suggestions by severity
+    # Sort suggestions by severity and return only the top one
     sorted_suggestions = sorted(suggestions, key=lambda s: severity_order.get(s.split(" ")[0], 5))
-    return sorted_suggestions
-
+    return sorted_suggestions[0]
 
 # --- Image Processing Logic ---
 
@@ -335,7 +334,6 @@ def process_single_image(image: Image.Image,
             final_predictions[label] = predictions_v20.get(label, 0)
     return final_predictions
 
-
 # Function to process a batch of images from file paths
 def process_batch_images(image_files: List[str],
                          panel_detection_model: nn.Module,
@@ -363,14 +361,13 @@ def process_batch_images(image_files: List[str],
                 image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
             )
             total_score = calculate_total_score(predictions)
-            all_suggestions = cleaning_suggestions(predictions) # Get all suggestions
-            top_suggestion = all_suggestions[0] if all_suggestions else "No suggestions" # Get only the top suggestion
+            top_suggestion = cleaning_suggestions(predictions) # Get the top suggestion
 
             result_data = {
                 "Image Name": image_name,
                 "Total Score": round(total_score, 2),
                 **{label: round(score, 2) for label, score in predictions.items()},
-                "suggestions": top_suggestion # Add the top suggestion for CSV
+                "suggestions": top_suggestion # Add the top suggestion
             }
             all_results.append(result_data)
 
@@ -515,9 +512,9 @@ def main():
                     with suggestions_placeholder:
                          st.subheader("Suggestions")
                          suggestions = cleaning_suggestions(final_predictions)
-                         # Display all suggestions as a list
-                         for suggestion in suggestions:
-                             st.markdown(f"- {suggestion}")
+                         # Display only the top suggestion
+                         st.markdown(f"- {suggestions}")
+
 
                 except ValueError as e: # Catch panel detection or prediction errors
                     results_placeholder.error(f"⚠️ Analysis Error: {e}")
@@ -585,21 +582,13 @@ def main():
                         with results_placeholder_batch.container(): # Group subheader and table
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
-                            # Reorder columns as requested: image name, panel detected, rest labels, total score, suggestion
-                            # Exclude relevant keys from the general keys list for specific placement
-                            relevant_keys_for_order = ["Image Name", "Panel Detected", "Total Score", "suggestions"]
-                            other_keys = [k for k in CLASS_CONFIG.keys() if k not in relevant_keys_for_order]
-                            cols_order = ["Image Name", "Panel Detected"] + other_keys + ["Total Score", "suggestions"]
+                            # Reorder columns as requested: file name, total score, panel detected, rest, suggestions
+                            cols_order = ["Image Name", "Total Score", "Panel Detected"] + [k for k in CLASS_CONFIG.keys() if k not in ["Panel Detected", "suggestions"]] + ["suggestions"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
-
-                            # Set index to start from 1
-                            df_results.index = np.arange(1, len(df_results) + 1)
-
                             st.dataframe(df_results, use_container_width=True)
 
                         # Provide CSV download button
-                        # Include index in CSV with header 'Serial Number'
-                        csv_data = df_results.to_csv(index=True, index_label='Serial Number').encode('utf-8')
+                        csv_data = df_results.to_csv(index=False).encode('utf-8')
                         download_placeholder_batch.download_button(
                             label="⬇️ Download Results as CSV", data=csv_data,
                             file_name=f"spice_ai_{os.path.splitext(uploaded_zip.name)[0]}_results.csv",
