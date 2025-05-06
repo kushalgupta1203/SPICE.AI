@@ -459,8 +459,7 @@ def main():
 
     # --- Input Mode Selection in Sidebar ---
     with st.sidebar:
-        st.markdown('<h4 style="margin-bottom: 10px;">Input Mode</h4>', unsafe_allow_html=True)
-        
+        st.subheader("Input Mode")
         input_mode = st.radio(
             label="",
             options=["Single Image Upload", "Zip File Batch Upload"],
