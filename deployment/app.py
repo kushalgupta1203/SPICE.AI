@@ -459,15 +459,17 @@ def main():
 
     # --- Input Mode Selection in Sidebar ---
     with st.sidebar:
+        st.markdown('<h4 style="margin-bottom: 10px;">Input Mode</h4>', unsafe_allow_html=True)
+        
         input_mode = st.radio(
-            "Input Mode",
-            ["Single Image Upload", "Zip File Batch Upload"],
+            label="",
+            options=["Single Image Upload", "Zip File Batch Upload"],
             key="input_mode_radio"
         )
 
+
     # --- UI Logic for Selected Mode ---
     if input_mode == "Single Image Upload":
-        st.subheader("Upload a Single Solar Panel Image")
         uploaded_file = st.file_uploader(
             "Select an image (JPG, JPEG, PNG, WEBP)",
             type=["jpg", "jpeg", "png", "webp"],
@@ -534,7 +536,6 @@ def main():
 
 
     elif input_mode == "Zip File Batch Upload":
-        st.subheader("Upload Zip Archive for Batch Processing")
         uploaded_zip = st.file_uploader(
             "Select a Zip file containing solar panel images (.png, .jpg, .jpeg, .webp)",
             type="zip",
