@@ -555,7 +555,6 @@ def main():
             download_placeholder_batch.empty()
             error_placeholder_batch.empty()
 
-            st.info(f"Processing uploaded zip file: **{uploaded_zip.name}**")
             temp_dir = None # Initialize temporary directory variable
             try:
                 # Extract zip file contents - no spinner
@@ -575,7 +574,6 @@ def main():
                 if not image_files:
                     results_placeholder_batch.warning("⚠️ No valid image files (.png, .jpg, .jpeg, .webp) found in the zip archive.")
                 else:
-                    st.info(f"Found {len(image_files)} images. Starting analysis...")
                     # Create progress bar in the main area
                     progress_bar = st.progress(0, text="Processing images...")
 
