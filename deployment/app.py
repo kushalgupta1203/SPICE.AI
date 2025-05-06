@@ -369,6 +369,8 @@ def process_batch_images(image_files: List[str],
     all_results = []
     error_messages = []
     total_files = len(image_files)
+    
+    import re  # Add for emoji removal
 
     for i, image_file_path in enumerate(image_files):
         image_name = os.path.basename(image_file_path)
@@ -385,14 +387,27 @@ def process_batch_images(image_files: List[str],
                 image, panel_detection_model, inspection_model_v11, inspection_model_v20, device
             )
             total_score = calculate_total_score(predictions)
+            
             # Generate suggestions
             suggestions_list = cleaning_suggestions(predictions)
-            suggestions_text = "; ".join(suggestions_list)  # Join with semicolons for CSV readability
+            
+            # For batch processing:
+            # 1. Take only the top suggestion (first in the list)
+            # 2. Remove emojis
+            if suggestions_list:
+                top_suggestion = suggestions_list[0]
+                # Remove emoji characters (typically those outside ASCII range)
+                top_suggestion_no_emoji = re.sub(r'[^\x00-\x7F]+', '', top_suggestion).strip()
+                # Remove any leading whitespace that might remain after emoji removal
+                top_suggestion_no_emoji = re.sub(r'^\s+', '', top_suggestion_no_emoji)
+            else:
+                top_suggestion_no_emoji = "No suggestion available"
 
             result_data = {
+                "Image #": i + 1,
                 "Image Name": image_name,
                 "Total Score": round(total_score, 2),
-                "Suggestions": suggestions_text,
+                "Suggestions": top_suggestion_no_emoji,  # Use the modified suggestion
                 **{label: round(score, 2) for label, score in predictions.items()}
             }
             all_results.append(result_data)
@@ -606,9 +621,9 @@ def main():
                             st.subheader("Batch Processing Results")
                             df_results = pd.DataFrame(all_results)
                             # Reorder columns for better readability
-                            cols_order = ["Image Name", "Panel Detected", "Clean Panel", "Electrical Damage",
-                                          "Physical Damage", "Snow Covered", "Water Obstruction", "Foreign Particle Contamination",
-                                          "Bird Interference", "Total Score", "Suggestions"]
+                            cols_order = ["Image #", "Image Name", "Panel Detected", "Clean Panel",
+                                          "Electrical Damage", "Physical Damage", "Snow Covered", "Water Obstruction",
+                                          "Foreign Particle Contamination", "Bird Interference", "Total Score", "Suggestions"]
                             df_results = df_results[[col for col in cols_order if col in df_results.columns]] # Ensure columns exist
                             st.dataframe(df_results, use_container_width=True)
 
